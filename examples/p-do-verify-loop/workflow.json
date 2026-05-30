@@ -1,0 +1,55 @@
+{
+  "name": "p-do-verify-loop",
+  "entry": "dv_builder",
+  "max_steps": 10,
+  "nodes": [
+    {
+      "id": "dv_builder",
+      "agent": "agents/dv_builder.md",
+      "type": "work",
+      "input": "{{user_request}}\n{{verdict}}",
+      "output_key": "build"
+    },
+    {
+      "id": "dv_tester",
+      "agent": "agents/dv_tester.md",
+      "type": "work",
+      "input": "{{build}}",
+      "output_key": "test"
+    },
+    {
+      "id": "dv_verdict",
+      "agent": "agents/dv_verdict.md",
+      "type": "router",
+      "input": "{{test}}",
+      "output_key": "verdict"
+    },
+    {
+      "id": "dv_done",
+      "agent": "agents/dv_done.md",
+      "type": "work",
+      "input": "{{build}}\n{{test}}",
+      "output_key": "result"
+    }
+  ],
+  "edges": [
+    {
+      "from": "dv_builder",
+      "to": "dv_tester"
+    },
+    {
+      "from": "dv_tester",
+      "to": "dv_verdict"
+    },
+    {
+      "from": "dv_verdict",
+      "to": "dv_builder",
+      "when": "fail"
+    },
+    {
+      "from": "dv_verdict",
+      "to": "dv_done",
+      "when": "pass"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "p-escalate-gate",
+  "entry": "eg_gate",
+  "max_steps": 10,
+  "nodes": [
+    {
+      "id": "eg_gate",
+      "agent": "agents/eg_gate.md",
+      "type": "router",
+      "input": "{{user_request}}",
+      "output_key": "escalate_gate"
+    },
+    {
+      "id": "eg_out",
+      "agent": "agents/eg_out.md",
+      "type": "work",
+      "input": "{{user_request}}",
+      "output_key": "escalate_result"
+    },
+    {
+      "id": "eg_user",
+      "agent": "agents/eg_user.md",
+      "type": "work",
+      "input": "{{user_request}}",
+      "output_key": "escalation_report"
+    }
+  ],
+  "edges": [
+    {
+      "from": "eg_gate",
+      "to": "eg_out",
+      "when": "resolved"
+    },
+    {
+      "from": "eg_gate",
+      "to": "eg_user",
+      "when": "escalate"
+    }
+  ]
+}

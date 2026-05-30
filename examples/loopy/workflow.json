@@ -1,0 +1,21 @@
+{
+  "name": "loopy",
+  "entry": "build",
+  "max_steps": 10,
+  "nodes": [
+    { "id": "build",   "agent": "agents/build.md",          "input": "{{user_request}}\n{{verdict}}", "output_key": "build" },
+    { "id": "test",    "agent": "agents/test.md",           "input": "{{build}}",                     "output_key": "test" },
+    { "id": "verdict", "agent": "agents/verdict-router.md", "type": "router", "input": "{{test}}",   "output_key": "verdict" },
+    { "id": "ship",    "agent": "agents/ship.md",           "input": "{{build}}\n{{test}}",           "output_key": "result" }
+  ],
+  "edges": [
+    { "from": "build", "to": "test" },
+    { "from": "test",  "to": "verdict" },
+    { "from": "verdict", "to": "build", "when": "fail" },
+    { "from": "verdict", "to": "ship", "when": "pass" }
+  ],
+  "trial": [
+    { "observe": "result", "expect": { "kind": "non-empty" } },
+    { "observe": "result", "expect": { "kind": "contains", "value": "Ship" } }
+  ]
+}

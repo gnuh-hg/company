@@ -1,0 +1,113 @@
+{
+  "name": "hq",
+  "entry": "coo",
+  "max_steps": 40,
+  "nodes": [
+    {
+      "id": "coo",
+      "agent": "agents/coo.md",
+      "type": "router",
+      "input": "{{user_request}}\n{{mem_mistakes}}\n{{mem_patterns}}",
+      "output_key": "coo_route"
+    },
+    {
+      "id": "researcher",
+      "agent": "agents/researcher.md",
+      "type": "work",
+      "input": "{{user_request}}\n{{mem_context}}\n{{mem_patterns}}",
+      "output_key": "research"
+    },
+    {
+      "id": "rg_gate",
+      "agent": "agents/rg_gate.md",
+      "type": "router",
+      "input": "{{research}}",
+      "output_key": "research_gate"
+    },
+    {
+      "id": "clarify_gate",
+      "agent": "agents/clarify_gate.md",
+      "type": "router",
+      "input": "{{research}}",
+      "output_key": "clarify_decision"
+    },
+    {
+      "id": "planner",
+      "agent": "agents/planner.md",
+      "type": "work",
+      "input": "{{user_request}}\n{{research}}\n{{plan}}\n{{verdict}}\n{{mem_patterns}}",
+      "output_key": "plan"
+    },
+    {
+      "id": "cto",
+      "agent": "agents/cto.md",
+      "type": "work",
+      "input": "{{plan}}\n{{mem_patterns}}",
+      "output_key": "spec"
+    },
+    {
+      "id": "builder",
+      "agent": "agents/builder.md",
+      "type": "work",
+      "input": "{{user_request}}\n{{spec}}\n{{verdict}}\nENGINE_RUN={{engine_run}}",
+      "output_key": "build"
+    },
+    {
+      "id": "tester",
+      "agent": "agents/tester.md",
+      "type": "router",
+      "input": "{{build}}\n{{plan}}",
+      "output_key": "verdict"
+    },
+    {
+      "id": "escalate_gate",
+      "agent": "agents/escalate_gate.md",
+      "type": "router",
+      "input": "{{user_request}}\n{{plan}}\n{{verdict}}",
+      "output_key": "escalate_decision"
+    },
+    {
+      "id": "escalate_report",
+      "agent": "agents/escalate_report.md",
+      "type": "work",
+      "input": "{{user_request}}\n{{plan}}\n{{verdict}}",
+      "output_key": "escalation_report"
+    },
+    {
+      "id": "record",
+      "agent": "agents/record.md",
+      "type": "work",
+      "input": "{{user_request}}\n{{build}}\n{{verdict}}",
+      "output_key": "record_result",
+      "memory_write": "context"
+    }
+  ],
+  "edges": [
+    { "from": "coo", "to": "researcher", "when": "build" },
+    { "from": "coo", "to": "planner", "when": "fix" },
+    { "from": "coo", "to": "escalate_gate", "when": "unclear" },
+
+    { "from": "researcher", "to": "rg_gate" },
+    { "from": "rg_gate", "to": "planner", "when": "enough" },
+    { "from": "rg_gate", "to": "clarify_gate", "when": "need_clarify" },
+
+    { "from": "clarify_gate", "to": "planner", "when": "ok" },
+    { "from": "clarify_gate", "to": "escalate_gate", "when": "missing_input" },
+
+    { "from": "planner", "to": "cto" },
+    { "from": "cto", "to": "builder" },
+    { "from": "builder", "to": "tester" },
+
+    { "from": "tester", "to": "record", "when": "pass" },
+    { "from": "tester", "to": "builder", "when": "fail_fix" },
+    { "from": "tester", "to": "planner", "when": "fail_replan" },
+    { "from": "tester", "to": "escalate_gate", "when": "escalate" },
+
+    { "from": "escalate_gate", "to": "planner", "when": "resolved" },
+    { "from": "escalate_gate", "to": "escalate_report", "when": "escalate" }
+  ],
+  "trial": [
+    { "observe": "record_result", "expect": { "kind": "non-empty" } },
+    { "observe": "build", "expect": { "kind": "non-empty" } }
+  ]
+}

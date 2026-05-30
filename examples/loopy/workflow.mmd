@@ -1,0 +1,9 @@
+graph TD
+    build["build"]
+    test["test"]
+    verdict{"verdict"}
+    ship["ship →result"]
+    build --> test
+    test --> verdict
+    verdict -->|fail| build
+    verdict -->|pass| ship

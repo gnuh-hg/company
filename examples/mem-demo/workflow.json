@@ -1,0 +1,12 @@
+{
+  "name": "mem-demo",
+  "entry": "worker",
+  "max_steps": 5,
+  "nodes": [
+    { "id": "worker", "agent": "agents/worker.md", "input": "Yêu cầu: {{user_request}}\nBài học từ các lần chạy trước:\n{{mem_context}}", "output_key": "work" },
+    { "id": "record", "agent": "agents/record.md", "input": "Bài học rút ra từ lần chạy này cho yêu cầu: {{user_request}}", "output_key": "lesson", "memory_write": "context" }
+  ],
+  "edges": [
+    { "from": "worker", "to": "record" }
+  ]
+}

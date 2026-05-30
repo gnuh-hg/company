@@ -1,0 +1,51 @@
+{
+  "name": "p-research-gather",
+  "entry": "rg_researcher",
+  "max_steps": 10,
+  "nodes": [
+    {
+      "id": "rg_researcher",
+      "agent": "agents/rg_researcher.md",
+      "type": "work",
+      "input": "{{user_request}}",
+      "output_key": "research"
+    },
+    {
+      "id": "rg_gate",
+      "agent": "agents/rg_gate.md",
+      "type": "router",
+      "input": "{{research}}",
+      "output_key": "research_gate"
+    },
+    {
+      "id": "rg_out",
+      "agent": "agents/rg_out.md",
+      "type": "work",
+      "input": "{{research}}",
+      "output_key": "research_result"
+    },
+    {
+      "id": "rg_clarify",
+      "agent": "agents/rg_clarify.md",
+      "type": "work",
+      "input": "{{research}}",
+      "output_key": "clarify_request"
+    }
+  ],
+  "edges": [
+    {
+      "from": "rg_researcher",
+      "to": "rg_gate"
+    },
+    {
+      "from": "rg_gate",
+      "to": "rg_out",
+      "when": "enough"
+    },
+    {
+      "from": "rg_gate",
+      "to": "rg_clarify",
+      "when": "need_clarify"
+    }
+  ]
+}

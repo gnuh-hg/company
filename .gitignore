@@ -1,0 +1,9 @@
+# Sandbox cô lập của Tester tầng trial (engine/sandbox.ps1) — artifact tạm, teardown sau chạy.
+sandbox/
+
+# Artifact run của engine (mỗi project tự sinh).
+.runs/
+
+# Branch chi nhánh HQ sinh ra (Phase 5 promote) — regen được từ build-spec, không commit.
+# Giữ thư mục projects/ (placeholder), bỏ qua mọi branch con.
+projects/*/

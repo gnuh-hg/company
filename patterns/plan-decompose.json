@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "name": "plan-decompose",
+    "stage": "plan (dài→ngắn)",
+    "entry": "__P__planner",
+    "exits": [
+      { "label": "long", "node": "__P__long" },
+      { "label": "short", "node": "__P__short" }
+    ],
+    "routers": ["__P__classify"],
+    "router_labels": {
+      "__P__classify": ["long", "short"]
+    },
+    "fallback": "Khi không chắc, classify mặc định 'short' (kế hoạch ngắn, ít rủi ro tràn bước) — nhánh an toàn; KHÔNG có cycle nên không cần back-edge, host cấp max_steps làm cầu dao chung.",
+    "note": "Placeholder __P__ CHỈ ở node.id + edge.from/to. planner xuất plan-as-data → classify quyết độ sâu (long/short) DO ROUTER, không do người (brain-model §B). 'long' đi nhánh kế hoạch dài (chia nhỏ nhiều bước), 'short' đi nhánh ngắn (làm thẳng). Data key (input/output_key) là tên thật; host lo namespace khi ghép nhiều pattern. Host bind agent agents/<stamped-id>.md + cấp name/entry/max_steps."
+  },
+  "nodes": [
+    { "id": "__P__planner",  "type": "work",   "input": "{{user_request}}", "output_key": "plan" },
+    { "id": "__P__classify", "type": "router", "input": "{{plan}}",          "output_key": "plan_depth" },
+    { "id": "__P__long",     "type": "work",   "input": "{{plan}}",          "output_key": "plan_result" },
+    { "id": "__P__short",    "type": "work",   "input": "{{plan}}",          "output_key": "plan_result" }
+  ],
+  "edges": [
+    { "from": "__P__planner", "to": "__P__classify" },
+    { "from": "__P__classify", "to": "__P__long",  "when": "long" },
+    { "from": "__P__classify", "to": "__P__short", "when": "short" }
+  ]
+}

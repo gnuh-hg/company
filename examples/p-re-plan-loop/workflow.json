@@ -1,0 +1,49 @@
+{
+  "name": "p-re-plan-loop",
+  "entry": "rp_planner",
+  "max_steps": 10,
+  "nodes": [
+    {
+      "id": "rp_planner",
+      "agent": "agents/rp_planner.md",
+      "type": "work",
+      "input": "{{user_request}}\n{{plan_feedback}}",
+      "output_key": "plan"
+    },
+    {
+      "id": "rp_verdict",
+      "agent": "agents/rp_verdict.md",
+      "type": "router",
+      "input": "{{plan}}",
+      "output_key": "plan_feedback"
+    },
+    {
+      "id": "rp_proceed",
+      "agent": "agents/rp_proceed.md",
+      "type": "work",
+      "input": "{{plan}}",
+      "output_key": "plan_result"
+    }
+  ],
+  "edges": [
+    {
+      "from": "rp_planner",
+      "to": "rp_verdict"
+    },
+    {
+      "from": "rp_verdict",
+      "to": "rp_planner",
+      "when": "fail"
+    },
+    {
+      "from": "rp_verdict",
+      "to": "rp_planner",
+      "when": "clarify"
+    },
+    {
+      "from": "rp_verdict",
+      "to": "rp_proceed",
+      "when": "proceed"
+    }
+  ]
+}

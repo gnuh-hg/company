@@ -1,0 +1,15 @@
+graph TD
+    tier{"tier"}
+    d20["d20 →discount"]
+    d10["d10 →discount"]
+    d5["d5 →discount"]
+    d0["d0 →discount"]
+    output["output →result"]
+    tier -->|gt10000| d20
+    tier -->|gt5000| d10
+    tier -->|gt1000| d5
+    tier -->|else| d0
+    d20 --> output
+    d10 --> output
+    d5 --> output
+    d0 --> output

@@ -1,0 +1,40 @@
+{
+  "name": "p-clarify-gate",
+  "entry": "cg_gate",
+  "max_steps": 10,
+  "nodes": [
+    {
+      "id": "cg_gate",
+      "agent": "agents/cg_gate.md",
+      "type": "router",
+      "input": "{{user_request}}",
+      "output_key": "clarify_gate"
+    },
+    {
+      "id": "cg_out",
+      "agent": "agents/cg_out.md",
+      "type": "work",
+      "input": "{{user_request}}",
+      "output_key": "clarify_result"
+    },
+    {
+      "id": "cg_escalate",
+      "agent": "agents/cg_escalate.md",
+      "type": "work",
+      "input": "{{user_request}}",
+      "output_key": "clarify_escalation"
+    }
+  ],
+  "edges": [
+    {
+      "from": "cg_gate",
+      "to": "cg_out",
+      "when": "ok"
+    },
+    {
+      "from": "cg_gate",
+      "to": "cg_escalate",
+      "when": "missing_input"
+    }
+  ]
+}

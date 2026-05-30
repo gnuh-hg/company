@@ -1,0 +1,16 @@
+{
+  "name": "web-demo",
+  "pipeline": [
+    { "step": "story",   "agent": "agents/pm.md",                 "input": "{{user_request}}",     "output_key": "story" },
+    { "step": "spec",    "agent": "agents/ba.md",                 "input": "{{story}}",            "output_key": "spec" },
+    { "step": "flow",    "agent": "agents/ux.md",                 "input": "{{spec}}",             "output_key": "flow" },
+    { "step": "design",  "agent": "agents/ui.md",                 "input": "{{flow}}",             "output_key": "design" },
+    { "step": "tasks",   "agent": "agents/tech-lead.md",          "input": "{{spec}}\n{{design}}", "output_key": "tasks" },
+    { "step": "schema",  "agent": "agents/db-architect.md",       "input": "{{spec}}\n{{tasks}}",  "output_key": "schema" },
+    { "step": "api",     "agent": "agents/api-developer.md",      "input": "{{spec}}\n{{schema}}", "output_key": "api" },
+    { "step": "auth",    "agent": "agents/auth-engineer.md",      "input": "{{spec}}\n{{api}}",    "output_key": "auth" },
+    { "step": "fe",      "agent": "agents/frontend-developer.md", "input": "{{design}}\n{{api}}",  "output_key": "fe" },
+    { "step": "deploy",  "agent": "agents/devops.md",             "input": "{{api}}\n{{fe}}",      "output_key": "deploy" },
+    { "step": "qa",      "agent": "agents/qa-functional.md",      "input": "{{spec}}\n{{deploy}}", "output_key": "report" }
+  ]
+}

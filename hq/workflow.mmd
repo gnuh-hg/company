@@ -1,0 +1,29 @@
+graph TD
+    coo{"coo →coo_route"}
+    researcher["researcher →research"]
+    rg_gate{"rg_gate →research_gate"}
+    clarify_gate{"clarify_gate →clarify_decision"}
+    planner["planner →plan"]
+    cto["cto →spec"]
+    builder["builder →build"]
+    tester{"tester →verdict"}
+    escalate_gate{"escalate_gate →escalate_decision"}
+    escalate_report["escalate_report →escalation_report"]
+    record["record →record_result"]
+    coo -->|build| researcher
+    coo -->|fix| planner
+    coo -->|unclear| escalate_gate
+    researcher --> rg_gate
+    rg_gate -->|enough| planner
+    rg_gate -->|need_clarify| clarify_gate
+    clarify_gate -->|ok| planner
+    clarify_gate -->|missing_input| escalate_gate
+    planner --> cto
+    cto --> builder
+    builder --> tester
+    tester -->|pass| record
+    tester -->|fail_fix| builder
+    tester -->|fail_replan| planner
+    tester -->|escalate| escalate_gate
+    escalate_gate -->|resolved| planner
+    escalate_gate -->|escalate| escalate_report

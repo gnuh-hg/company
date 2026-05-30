@@ -1,0 +1,23 @@
+{
+  "name": "branchy",
+  "entry": "tier",
+  "max_steps": 30,
+  "nodes": [
+    { "id": "tier",   "agent": "agents/tier-router.md", "type": "router", "input": "{{user_request}}", "output_key": "tier" },
+    { "id": "d20",    "agent": "agents/disc.md",   "input": "{{user_request}}\n20%", "output_key": "discount" },
+    { "id": "d10",    "agent": "agents/disc.md",   "input": "{{user_request}}\n10%", "output_key": "discount" },
+    { "id": "d5",     "agent": "agents/disc.md",   "input": "{{user_request}}\n5%",  "output_key": "discount" },
+    { "id": "d0",     "agent": "agents/disc.md",   "input": "{{user_request}}\n0%",  "output_key": "discount" },
+    { "id": "output", "agent": "agents/output.md", "input": "{{user_request}}\n{{discount}}", "output_key": "result" }
+  ],
+  "edges": [
+    { "from": "tier", "to": "d20", "when": "gt10000" },
+    { "from": "tier", "to": "d10", "when": "gt5000" },
+    { "from": "tier", "to": "d5",  "when": "gt1000" },
+    { "from": "tier", "to": "d0",  "when": "else" },
+    { "from": "d20", "to": "output" },
+    { "from": "d10", "to": "output" },
+    { "from": "d5",  "to": "output" },
+    { "from": "d0",  "to": "output" }
+  ]
+}

@@ -1,0 +1,102 @@
+# CLAUDE.md — company/
+
+> Bản đồ + quy ước cho Claude khi làm việc trong `company/`. Đọc file này **trước** khi đụng bất cứ gì trong thư mục này.
+
+---
+
+## Đây là gì?
+
+`company/` chứa **Workflow Engine** — engine điều phối agent chạy full-local trên PowerShell. Engine là nền để mọi pipeline (HQ + chi nhánh) chạy trên đó. Xem [`README.md`](README.md) để biết cách dùng từng lệnh.
+
+Cách dùng nhanh (từ `company/engine/`):
+
+```powershell
+./run.ps1 run hello "ping" -Mock     # chạy offline, không đốt token
+./run.ps1 validate hello              # exit = số lỗi
+./run.ps1 viz hello                   # ASCII DAG + .mmd
+./run.ps1 status hello                # tiến độ run gần nhất
+```
+
+---
+
+## Bản đồ file
+
+| File | Vai trò |
+|---|---|
+| `README.md` | Cách dùng engine — 3 luồng quickstart (project con / HQ / nối node) + bảng 13 lệnh tên mới theo nhóm + mục Tương thích (alias) + doc finding (A-01/05/15/24 + sandbox). **Tên lệnh mới Phase B**: `graph` (cũ viz), `autobuild` (cũ e2e), `autofix` (cũ e2efix), `selftest` (cũ test) |
+| `engine/run.ps1` | Dispatcher — entry point duy nhất. **Phase B**: 13 lệnh nhóm theo trục PROJECT/BUILD/AUTHOR/Advanced + aliasMap im lặng (viz→graph·e2e→autobuild·e2efix→autofix·test→selftest) + A-10 (cảnh báo flag thiếu value) + A-01-hint (gợi `ENGINE_MOCK_ROUTER` khi router throw dưới `-Mock`) |
+| `engine/test-runner.ps1` | Runner gom test (Phase B.3): `Invoke-SelfTest` chạy 11 mục — 3 test script (hq-tests/hq-graph-tests/e2e-harness-tests qua subprocess) + 7 `p-*/stamp.ps1` + mem-demo done-gate 2-run inline; in PASS/FAIL từng mục + bảng tổng, **exit = số mục fail**. Lệnh `run.ps1 selftest [all]` (alias `test`). Chỉ kiểm exit 0 — KHÔNG assert nội dung stamp/mem-demo (defer C). Dot-source-safe |
+| `engine/graph.ps1` | `Get-Graph`: load workflow → graph chuẩn hoá (pipeline→graph), nodes/edges/entry/adjacency |
+| `engine/workflow.ps1` | Executor: single-cursor walk + router edge-select + max_steps guard + state (visits) + resume |
+| `engine/bridge.ps1` | Resolve `{{key}}` → prompt |
+| `engine/viz.ps1` | Graph → ASCII (node + edge list) + Mermaid (diamond router + nhãn when + back-edge) |
+| `engine/validate.ps1` | Validation v2 (schema / agent / router when / reachability / max_steps; data-cycle = warning) |
+| `engine/status.ps1` | Viewer status (path + iter mỗi lượt) + logs |
+| `engine/edit.ps1` | TUI sửa workflow.json |
+| `engine/check.ps1` | Tester **tầng cấu trúc** (Phase 2-A): `Test-StructuralGate` 3 tiêu chí tuần tự (validate exit0 → run -Mock done → mọi output_key non-empty) + `Write-CheckResult` (exit = số tiêu chí fail). Lệnh `run.ps1 check`. Short-circuit + reason máy-đọc-được |
+| `engine/sandbox.ps1` | Tester **tầng trial** + harness cô lập (Phase 2-B): `Copy-ToSandbox`/`Remove-Sandbox` (copy project trừ `.runs/` → `company/sandbox/<runid>/`, teardown có guard) + `Get-Trials`/`Test-TrialExpect`/`Invoke-Trial` chạy project **THẬT** (no -Mock) assert `trial[]` trên artifact. Lệnh `run.ps1 trial` (2 tầng: cấu trúc-mock → trial-real) |
+| `engine/e2e.ps1` | Real-run harness HQ (Phase 5): `Get-ProjectsRoot` + `Test-DryRunGate` (mock dry-run gate free, xác nhận GRAPH tới terminal trước khi đốt token) + `Find-GeneratedBranch`/`Promote-Branch` (copy branch đạt → `projects/`, guard chống rò+đè) + `Invoke-E2E` (build: dry-run→sandbox→run real→verify validate/check→promote) + `Invoke-E2EFix` (fix-loop: seed branch hỏng→assert pre-fix validate FAIL+SHA256→run real→assert post-fix exit 0+`file_changed`→promote) + `Write-E2EResult`. Lệnh `run.ps1 e2e`/`e2efix` (`-Real` đốt token; `-Seed`/`-Branch` cho fix; `-KeepSandbox` debug). Mock-path bất biến |
+| `engine/pattern.ps1` | `Expand-Pattern`: author-time helper stamp fragment `__P__<x>`→`<prefix>_<x>` (id+edge) → workflow.json explicit. Engine runtime KHÔNG load fragment |
+| `engine/spec.ps1` | Lớp spec HQ (Phase 3-A): `Test-PlanSchema` (plan-as-data Planner) + `Test-BuildSpec` (build-spec CTO) — hàm thuần `{ok;errors[]}` gom mọi lỗi máy-đọc-được + `Invoke-BuildSpec $Spec $OutDir` (validate-trước-khi-ghi: copy `catalog/<role>.md`→`agents/<id>.md` + `Expand-Pattern` stamp + nối edge + stub node pattern → `workflow.json`). Lệnh `run.ps1 build <spec-file> [<outName>]` |
+| `engine/memory.ps1` | Memory 2 tầng (Phase M): `Get-Memory $ProjectDir [-Cap N]` (read-path: đọc HQ-global `company/memory/` + per-branch `<project>/memory/context.md` → hashtable 3 key `mem_mistakes`/`mem_patterns`/`mem_context`, split theo delimiter entry + cap N mới nhất, fence-skip; bridge nạp `{{mem_*}}` qua `Initialize-Context`) + `Write-MemoryEntry $ProjectDir $Type $Content` (write-path: node `record` `memory_write` append 1 block date-stamped vào đúng tầng theo loại). `global.md` gộp vào `mem_patterns` |
+| `company/memory/` | Store HQ-global (Phase M-A): `mistakes.md`/`patterns.md`/`global.md` (format entry đo được, delimiter `## <YYYY-MM-DD HH:MM> — <slug>`) + `README.md` (bảng loại→tầng→key bridge→đọc/ghi, cap N=10, reserved-key `mem_*`, convention per-branch `context.md`). Chỉ HQ ghi; per-branch `context.md` sinh lười khi node `record` ghi `context` |
+| `engine/lib/{json,log,claude}.ps1` | Tiện ích nền. `claude` có `-Mock` + `ENGINE_MOCK_ROUTER` (đa-spec `;`-separated: `"a:l1,l2;b:l3"` — mỗi router steer độc lập) |
+| `patterns/*.json` + `patterns/README.md` | 6 fragment robustness (Phase 0): `research-gather`, `clarify-gate`, `plan-decompose`, `re-plan-loop`, `do-verify-loop`, `escalate-gate` (node+edge+`when`, id placeholder `__P__x`) + convention |
+| `hq/workflow.json` + `hq/workflow.mmd` | **HQ graph (Phase 4)**: graph HQ hoàn chỉnh hand-authored (KHÔNG Expand-Pattern) — 11 node (`coo` router → `researcher` → `rg_gate` → `clarify_gate` → `planner` → `cto` → `builder` → `tester` router → `escalate_gate` → `escalate_report` → `record` memory_write), 17 cạnh robustness (COO 3 nhãn build/fix/unclear; research-gather; clarify-gate; do-verify-loop `tester→builder`; re-plan-loop `tester→planner`; escalate-gate), `entry=coo`, `max_steps=40` backstop, `trial[]` cấu trúc (real defer P5). 2 terminal: `record` (thành công) / `escalate_report` (bí). `.mmd` = render Mermaid (diamond router + back-edge) |
+| `hq/agents/researcher.md` | Agent thứ 6 HQ-level (Phase 4): gom hiểu biết `{{user_request}}` + memory → tóm tắt + `open_questions[]`, in nhãn `enough`/`need_clarify` cho `rg_gate`. Read-only. KHÔNG nhầm với `catalog/researcher.md` (vai chi nhánh). (Phase 4 cũng thêm 5 agent phụ trợ `hq/agents/{rg_gate,clarify_gate,escalate_gate,escalate_report,record}.md`) |
+| `examples/hq-graph-tests.ps1` | Mock path-coverage graph HQ (Phase 4-B): 8 path qua `ENGINE_MOCK_ROUTER` đa-spec — 6 coverage (build-happy/fix/re-plan-loop/do-verify-fix/unclear-escalate/clarify-escalate) + 2 loop-bounding (re-plan escalate khi revision≥max → escalate_report soft-exit; `tester:fail_replan` luôn fail → `max_steps=40` backstop throw + state failed). Assert status+terminal+shape path. Reset `$script:MockAgentCalls` mỗi test. Exit = số path fail |
+| `hq/build-spec.md` + `hq/agents/*.md` + `hq/skills.md` | **HQ agents + spec (Phase 3)**: `build-spec.md` = hợp đồng dữ liệu plan-as-data (Planner) → build-spec (CTO) → `workflow.json` (Builder) + ví dụ `tiny-api`; `agents/{coo,planner,cto,builder,tester}.md` = 5 system prompt headless (template 5 mục, **chỉ `builder.md`** có `allowedTools:[Write,Edit]`+`permission_mode:acceptEdits` — agent duy nhất ghi file; COO=router 3 nhãn build/fix/unclear; Planner=WHAT plan-as-data; CTO=HOW build-spec; Tester=read-only check/trial+ghi memory); `skills.md` = bảng 5 skill (scaffold/patch/diagnose/run-test/report) → lệnh engine sẵn có (KHÔNG code engine mới) |
+| `catalog/*.md` + `catalog/README.md` | **17 vai chi nhánh hand-authored** (Phase 1): đầu-não (researcher, planner), Product (pm, ba), Design (ux, ui), Engineering (tech-lead, db-architect, api-developer, auth-engineer, frontend-developer, devops, mobile-ios/android/flutter), QA (qa-functional, qa-regression). Mỗi file = system prompt + ranh giới theo template 5 mục (Một việc/Input/Trả ra/Không làm/Handoff). `README.md` = template + ma trận ranh giới chống đè + index + cấu hình quy mô. Là **menu vai cho CTO** (Phase 3) chọn lắp pipeline |
+| `projects/` | **App thật** (chi nhánh HQ build ra qua E2E real Phase 5). Hiện có `landing-email` (build happy-path) + `broken-web` (fix-loop). Gitignored (`projects/*/`) — regen-được, không commit. |
+| `examples/broken-web/` | Fixture branch CỐ Ý HỎNG (Phase 5.4): copy `landing-email` + gài typo edge `"to": "frontend-develper"` → `validate` 3 lỗi deterministic. `Invoke-E2EFix` seed vào sandbox để test fix-loop real (Builder patch typo → validate exit 0). Committed (không gitignore) vì là fixture tái dùng |
+| `sandbox/` | Khu cô lập tầng trial (`engine/sandbox.ps1` copy project vào `<runid>/` chạy real → teardown). Gitignored (`company/.gitignore`); rỗng khi không có trial đang chạy |
+| `examples/p-*/` | Demo wrapper mỗi pattern (`stamp.ps1` + agent stub) + `examples/p-brain/` = integration nối pattern theo brain-model §D (vòng đời research→plan→do/verify→re-plan→escalate) |
+| `examples/mem-demo/` | Demo memory (Phase M-B): node `worker` đọc `{{mem_context}}` → node `record` (`memory_write: context`) append bài học. Done-gate 2-run mock: run1 (memory rỗng) ghi → run2 đọc + output khác (tránh lặp). Dùng per-branch `context` → không bẩn HQ-global; fixture start sạch (không commit `memory/`) |
+| `examples/hq-*/` + `examples/hq-tests.ps1` | Per-agent mock test HQ (Phase 3-B.2): `hq-coo/` (router 3 path build/fix/unclear), `hq-tester/` (record-node `memory_write: context` + trial), `hq-planner/` (sample plan-as-data dài/ngắn/hỏng), `hq-cto/` (sample build-spec ok/vai-ngoài-catalog). `hq-tests.ps1` chạy 5 test đơn lẻ (COO 3 path / Planner+CTO validate / Builder Invoke-BuildSpec→validate+run-Mock / Tester ghi memory+check) — mock offline, dọn `.runs/`+`memory/`+sandbox sau verify, exit = số fail |
+| `examples/hello/` | Project test tối thiểu (2 agent echo — pipeline v1, regression tương thích ngược) |
+| `examples/branchy/` | Demo router OR 4 nhánh + merge |
+| `examples/loopy/` | Demo loop build→test→verdict với router thoát + `max_steps` |
+| `examples/web-demo/` | Chi nhánh web lắp tay từ `catalog/` (Phase 1-C): `workflow.json` pipeline v1 nối 11 vai web-full (pm→ba→ux→ui→tech-lead→db→api→auth→fe→devops→qa) + agent stub echo. Chứng minh catalog lắp ráp được — `validate` exit 0 + `run -Mock` done |
+| `information/agent-design.md` | Master design brief gốc (HQ + catalog chi nhánh + triết lý). **Lưu ý**: phần engine/pipeline trong đây là bản gốc v1 — `ROADMAP.md` đã mở rộng/thay thế hướng build |
+| `plan/hq-build/ROADMAP.md` | Chia HQ thành 9 phase (R/0/1/2/M/3/4/5/6) + cross-cutting đã chốt — mỗi phase = 1 long-plan soạn riêng khi cần |
+| `plan/hq-build/phase-r/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase R (research + mô hình đầu-não): 3 sub-phase / 5 session. Deliverable = `plan/hq-build/phase-r/brain-model.md` (đã chốt) |
+| `plan/hq-build/phase-0/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase 0 (pattern robustness): 3 sub-phase / 5 session — **✅ DONE**. Deliverable = 6 fragment `patterns/<name>.json` + `engine/pattern.ps1` (Expand-Pattern) + 6 demo wrapper `examples/p-*` + `examples/p-brain/` integration |
+| `plan/hq-build/phase-1/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase 1 (catalog vai chi nhánh): 3 sub-phase / 5 session — **✅ DONE**. Deliverable = `catalog/` 17 vai .md (template 5 mục: Một việc/Input/Trả ra/Không làm/Handoff) + `catalog/README.md` (ma trận ranh giới chống đè) + `examples/web-demo/` lắp tay (validate exit 0 + run -Mock done). Chốt: MVP full catalog incl mobile |
+| `plan/hq-build/phase-2/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase 2 (Tester máy-kiểm-được + sandbox + fixture): 2 sub-phase / 4 session — **✅ DONE**. Deliverable = `engine/check.ps1` (`Test-StructuralGate` tầng cấu trúc; lệnh `run.ps1 check`) + `engine/sandbox.ps1` (`Copy-ToSandbox`/`Remove-Sandbox` + `Invoke-Trial` real assert `trial[]`; lệnh `run.ps1 trial` 2 tầng) + `trial[]` định nghĩa (top-level `workflow.json`, đầu vào C-3) + `company/.gitignore`. Gate: 2 tầng pass trên `loopy`, 3 mutation fail đúng tầng. Chốt (user): fixture = tái dùng `examples/loopy`, tier trial = THẬT |
+| `plan/hq-build/phase-3/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase 3 (HQ agents + skills): 2 sub-phase / 4 session — **✅ DONE**. Deliverable = `hq/build-spec.md` (schema C-3 + node-level) + `engine/spec.ps1` (`Test-PlanSchema`/`Test-BuildSpec`/`Invoke-BuildSpec` + lệnh `run.ps1 build`) + `hq/agents/{coo,planner,cto,builder,tester}.md` (5 system prompt, Builder-only Write/Edit) + `hq/skills.md` (scaffold/patch/diagnose/run-test/report → lệnh engine) + per-agent mock test `examples/hq-tests.ps1` (5 fixture `examples/hq-*`). Chốt (user): build-spec C-3+node-level input/output_key; Planner=WHAT/CTO=HOW; COO 3 nhãn build/fix/unclear; Builder-only Write/Edit (convention frontmatter) + copy+stamp deterministic qua `Invoke-BuildSpec` |
+| `plan/hq-build/phase-4/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase 4 (HQ workflow graph): 2 sub-phase / 4 session — **✅ DONE**. Deliverable = `hq/agents/researcher.md` (agent thứ 6) + `hq/workflow.json` (11 node robustness, max_steps=40) + `hq/workflow.mmd` + `examples/hq-graph-tests.ps1` (8 path mock-drive: 6 coverage + re-plan escalate soft + max_steps backstop hard). Done-gate 5/5 pass. Chốt (user): Q1 researcher front / Q2 tester-là-router / Q3 fail tách fix·replan / Q4 fix→planner; HQ graph hand-authored, trial real defer P5 |
+| `plan/hq-build/phase-m/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase M (cơ chế trí nhớ): 2 sub-phase / 4 session — **✅ DONE**. Deliverable = `company/memory/` (store HQ-global 3 file + README schema 2 tầng) + `engine/memory.ps1` (`Get-Memory` đọc by-type+cap N / `Write-MemoryEntry` append) + wire bridge (`Initialize-Context` nạp `{{mem_*}}`) + node `record` (`memory_write`) + `validate` check loại + reserved-key `mem_*` + `examples/mem-demo` (done-gate 2-run: run1 ghi→run2 đọc+tránh lặp). Chốt (user): store 2 tầng (HQ-global+per-branch), chỉ HQ ghi, bridge by-type+cap N, fixture mới; demo dùng `context` per-branch (không bẩn HQ-global) |
+| `plan/hq-build/phase-5/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase 5 (E2E thật): 2 sub-phase / 4 session — **✅ DONE** (done-gate 5/5). 5.1 wire frontmatter (`Get-AgentFrontmatter`→`--allowedTools`/`--permission-mode`/`--model`) + `model:` 11 agent. 5.2 harness `engine/e2e.ps1` (dry-run gate + sandbox + promote). 5.3 happy-path real → branch `landing-email` promote (sau 5 attempt: permission_mode→default, router label strip, coo bias build, builder cwd-isolation, `engine_run` key). 5.4 fix-loop real → bơm `{{user_request}}` vào builder + `Invoke-E2EFix` (seed branch hỏng→verify fail→pass) + fixture `examples/broken-web` → branch `broken-web` patch thật validate 3→0 (sau 2 attempt: hardening planner/tester confusion). Chốt (user): web-subset / wire-executor additive / sandbox-promote / mock-dry-run+model-tier / bơm-context-builder / burn-trọn. Watch-item: builder non-determinism (prompt-hardened, không guard engine) |
+| `plan/hq-improve/ROADMAP.md` | Roadmap đợt CẢI THIỆN HQ (sau khi build xong): 7 phase A→G (Audit / CLI&docs / fix+de-chắp-vá / engine HITL+event / app viewer / app live-log+duyệt / app edit) + cross-cutting D-1..D-4 đã chốt. Mỗi phase = 1 long-plan soạn riêng |
+| `plan/hq-improve/phase-b/PLAN.md` + `CHECKPOINT.md` + `cli-design.md` | Long-plan Phase B (CLI & docs ergonomics, #1): 2 sub-phase / 4 session — **✅ DONE**. Deliverable = `run.ps1` 13 lệnh tên mới + aliasMap im lặng + Show-Help nhóm + A-10 + A-01-hint (B.2) + `engine/test-runner.ps1` (`selftest` gom 3 script+7 stamp+mem-demo, B.3) + README viết lại 3 luồng + doc 5 finding (A-01/05/15/24 + sandbox) + CLAUDE.md/ROADMAP cập nhật (B.4). `cli-design.md` = bảng tên cũ→mới user-duyệt. Chốt (user): đổi 3 jargon (viz→graph·e2e→autobuild·e2efix→autofix) + selftest(alias test) + alias im lặng; engine executor bất biến; heuristic `-Router`/assert nội dung defer C. **Chỉ đụng `run.ps1`+docs+`test-runner.ps1` — engine executor bất biến.** |
+| `plan/hq-improve/phase-c/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase C (Fix bug + de-chắp-vá): 3 sub-phase / 10 session — **🟡 soạn xong, chưa thực thi**. Đóng 22 finding Phase-đích-C (`findings.md`) theo cụm: C.1 A-18+A-17 edit data-loss (P1) · C.2 A-06 accessor 4-bản→1 · C.3 A-07/11/12 cast-số+edges-vắng · C.4 A-14/25 path-guard · C.5 A-04/16/13 validate-gap · C.6 A-19/20 build-stamp+CC-c stamp-assert · C.7 A-21/22/23 memory+CC-c mem-demo verify · C.8 A-02/24 router-leak (keyed-by-node + heuristic) · C.9 A-03/09/05-fix+CC-a frontmatter tĩnh · C.10 A-08 stderr+1 real-run (P1, ĐỐT TOKEN user-gate). Chốt (user): D-C1 real-run xác nhận A-08 · D-C2 làm hết 22. **Mock-path bất biến (A-02/24 chỉ THÊM khả năng); regression chuẩn = validate hello + run hello -Mock + selftest mỗi session.** |
+| `plan/hq-improve/phase-d/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase D (Engine HITL + event stream, #3): 3 sub-phase / 7 session — **🟡 soạn xong, chưa thực thi**. Thêm khả năng dừng-chờ-người + phát event vào engine: D.1 `events.ndjson` emitter (7 loại event + **full output** mỗi node, `run.log` cũ giữ) · D.2 node type `approval` (schema+validate+viz/Mermaid, author-time) · D.3 executor pause→state `awaiting` + `Resume-Workflow -Decision` (tái dùng resume) · D.4 headless `-AutoApprove`+default fail-rõ + surface `run.ps1 resume -Decision`/`status` awaiting · D.5 `Test-DiffScope` (CC-b: whitelist `projects/<name>`+spec, bắt builder xoá `.runs/`) · D.6 diff-violation→awaiting gate + `examples/approval-demo/` + selftest mục mới (11→12) · D.7 docs+ROADMAP §Bàn-giao-D→E/F + (tuỳ) real-run user-gated. Chốt default (user skip câu hỏi 2026-05-30→"Recommended"): D-D1 reuse-resume · D-D2 node `approval` · D-D3 CC-b engine-part ở D · D-D4 fail-rõ+`-AutoApprove` · D-D5 events full-output. **Bất biến: graph không-gate chạy y hệt; mock-path bất biến; regression = validate hello + run hello -Mock + selftest mỗi session.** |
+| `plan/hq-improve/phase-a/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase A (Audit): 3 sub-phase / 5 session — **THUẦN ĐỌC, không sửa code**. Deliverable = `findings.md` (mỗi mục: loại bug/chắp-vá/doc-UX + file:line + tác động + mức P0/P1/P2 + phase đích) + baseline test mock. A.1 baseline+surface sweep / A.2-A.4 deep-read 17 file engine theo cụm / A.5 synthesis+user gate. Default: thang P0/P1/P2, KHÔNG chạy E2E real (mock-only) |
+| `.claude/agents/planner.md` | Agent lập kế hoạch META (dùng để soạn PLAN/CHECKPOINT cho từng phase HQ). Đã de-brand cho `company/`. KHÔNG nhầm với planner của HQ (Phase 3 — cái đó mới là headless/plan-as-data) |
+| `.claude/skills/plan-long/SKILL.md` | Skill plan dài: PLAN+CHECKPOINT, 1 chat=1 session, STOP gate (đã de-brand) |
+| `.claude/skills/plan-short/SKILL.md` | Skill plan ngắn inline: gate + verification (đã de-brand) |
+
+---
+
+## Quy ước bất biến
+
+1. **Engine là code cố định.** Agent (`.md`) chứa system prompt — **không** chứa logic workflow. Logic điều phối nằm trong `engine/*.ps1`.
+2. **`workflow.json` chỉ ngữ nghĩa.** Không bao giờ lưu toạ độ. Dạng graph khai báo `nodes` + `edges` (cạnh điều khiển tường minh, có `when` cho router) + `entry` + `max_steps`; `pipeline` v1 vẫn chạy qua loader chuẩn hoá. Layout tính lúc render.
+3. **Mock được offline.** `lib/claude.ps1 -Mock` trả output xác định → test Phase 1–3 không gọi model, không đốt token. Luôn ưu tiên `-Mock` khi test engine.
+4. **Một surface lệnh.** Mọi thao tác đi qua `run.ps1 <command> <project>`. Không tạo entry point khác.
+5. **Module dot-source-safe.** Mỗi `.ps1` guard `InvocationName`/`Line` để không tự exec khi bị dot-source. Giữ pattern này khi thêm module.
+6. **Chỉ thao tác trong `company/`.** Không đụng `leafnote/` hay project khác.
+
+---
+
+## Khi sửa code engine
+
+- Mỗi module có hàm thuần testable (vd `Test-Workflow`, `Get-WorkflowGraph`, `Resolve-Prompt`) + wrapper chạy trực tiếp. Sửa logic ở hàm thuần, không nhồi vào nhánh direct-run.
+- Sau khi sửa: chạy `./run.ps1 validate hello` + `./run.ps1 run hello "x" -Mock` làm regression tối thiểu. Dọn `.runs/` test sau verify.
+- `StrictMode -Version Latest` bật ở mọi file — guard `$null`/`.Count` trước khi truy cập (PowerShell ép `@()` → `$null` ở nhiều chỗ).
+
+---
+
+## Ngoài scope (plan riêng sau)
+
+Nội dung agent HQ thật (`coo/cto/builder/tester`), catalog agent chi nhánh, vòng lặp build–test–fix tự động, app GUI desktop. Engine hiện đã đủ với ASCII + Mermaid.

@@ -1,0 +1,22 @@
+graph TD
+    story["story"]
+    spec["spec"]
+    flow["flow"]
+    design["design"]
+    tasks["tasks"]
+    schema["schema"]
+    api["api"]
+    auth["auth"]
+    fe["fe"]
+    deploy["deploy"]
+    qa["qa →report"]
+    story --> spec
+    spec --> flow
+    flow --> design
+    design --> tasks
+    tasks --> schema
+    schema --> api
+    api --> auth
+    auth --> fe
+    fe --> deploy
+    deploy --> qa

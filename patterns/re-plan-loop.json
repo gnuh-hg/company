@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "name": "re-plan-loop",
+    "stage": "re-plan",
+    "entry": "__P__planner",
+    "exits": [
+      { "label": "proceed", "node": "__P__proceed" }
+    ],
+    "routers": ["__P__verdict"],
+    "router_labels": {
+      "__P__verdict": ["fail", "clarify", "proceed"]
+    },
+    "fallback": "__P__verdict --fail--> __P__planner + --clarify--> __P__planner (HAI back-edge VỀ planner, KHÔNG về researcher — brain-model §Tension); max_steps là cầu dao cứng chống re-plan vô hạn.",
+    "note": "Placeholder __P__ CHỈ ở node.id + edge.from/to. planner xuất plan → verdict đánh giá: 'fail' (kế hoạch sai) hoặc 'clarify' (cần làm rõ) đều quay VỀ planner để re-plan (KHÔNG về researcher — quyết định brain-model §Tension); 'proceed' tiến tiếp. Là pattern loop cốt lõi giai đoạn re-plan. Data key (input/output_key) là tên thật; host lo namespace khi ghép nhiều pattern. Host bind agent agents/<stamped-id>.md + cấp name/entry/max_steps."
+  },
+  "nodes": [
+    { "id": "__P__planner", "type": "work",   "input": "{{user_request}}\n{{plan_feedback}}", "output_key": "plan" },
+    { "id": "__P__verdict", "type": "router", "input": "{{plan}}",                              "output_key": "plan_feedback" },
+    { "id": "__P__proceed", "type": "work",   "input": "{{plan}}",                              "output_key": "plan_result" }
+  ],
+  "edges": [
+    { "from": "__P__planner", "to": "__P__verdict" },
+    { "from": "__P__verdict", "to": "__P__planner", "when": "fail" },
+    { "from": "__P__verdict", "to": "__P__planner", "when": "clarify" },
+    { "from": "__P__verdict", "to": "__P__proceed", "when": "proceed" }
+  ]
+}

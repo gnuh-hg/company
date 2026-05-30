@@ -1,0 +1,51 @@
+{
+  "name": "p-plan-decompose",
+  "entry": "pd_planner",
+  "max_steps": 10,
+  "nodes": [
+    {
+      "id": "pd_planner",
+      "agent": "agents/pd_planner.md",
+      "type": "work",
+      "input": "{{user_request}}",
+      "output_key": "plan"
+    },
+    {
+      "id": "pd_classify",
+      "agent": "agents/pd_classify.md",
+      "type": "router",
+      "input": "{{plan}}",
+      "output_key": "plan_depth"
+    },
+    {
+      "id": "pd_long",
+      "agent": "agents/pd_long.md",
+      "type": "work",
+      "input": "{{plan}}",
+      "output_key": "plan_result"
+    },
+    {
+      "id": "pd_short",
+      "agent": "agents/pd_short.md",
+      "type": "work",
+      "input": "{{plan}}",
+      "output_key": "plan_result"
+    }
+  ],
+  "edges": [
+    {
+      "from": "pd_planner",
+      "to": "pd_classify"
+    },
+    {
+      "from": "pd_classify",
+      "to": "pd_long",
+      "when": "long"
+    },
+    {
+      "from": "pd_classify",
+      "to": "pd_short",
+      "when": "short"
+    }
+  ]
+}

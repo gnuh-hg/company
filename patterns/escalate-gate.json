@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "name": "escalate-gate",
+    "stage": "escalate khi bí",
+    "entry": "__P__gate",
+    "exits": [
+      { "label": "resolved", "node": "__P__out" },
+      { "label": "escalate", "node": "__P__user" }
+    ],
+    "routers": ["__P__gate"],
+    "router_labels": {
+      "__P__gate": ["resolved", "escalate"]
+    },
+    "fallback": "Mặc định 'resolved' (tiếp tục) — chỉ rẽ 'escalate' khi bí THẬT (revision ≥ max, hoặc open_questions[] không tự giải). Nhánh an toàn = resolved; KHÔNG có cycle, host cấp max_steps làm cầu dao chung.",
+    "note": "Placeholder __P__ CHỈ ở node.id + edge.from/to. Cầu dao thoát ra user khi bí thật: 'escalate'→__P__user (thoát báo graceful), 'resolved'→__P__out (tiếp). Escalate là nhánh thoát GRACEFUL — router chủ động in 'escalate' khi đo được tín hiệu bí (revision/open_questions trong plan-as-data) — KHÁC max_steps throw cứng (backstop khi loop không tự thoát). Gate là entry (router làm node vào — precedent branchy/clarify-gate). Data key là tên thật; host lo namespace. Host bind agent agents/<stamped-id>.md + cấp name/entry/max_steps."
+  },
+  "nodes": [
+    { "id": "__P__gate", "type": "router", "input": "{{user_request}}", "output_key": "escalate_gate" },
+    { "id": "__P__out",  "type": "work",   "input": "{{user_request}}", "output_key": "escalate_result" },
+    { "id": "__P__user", "type": "work",   "input": "{{user_request}}", "output_key": "escalation_report" }
+  ],
+  "edges": [
+    { "from": "__P__gate", "to": "__P__out",  "when": "resolved" },
+    { "from": "__P__gate", "to": "__P__user", "when": "escalate" }
+  ]
+}

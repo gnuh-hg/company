@@ -1,0 +1,7 @@
+{
+  "name": "hello",
+  "pipeline": [
+    { "step": "a", "agent": "agents/echo-a.md", "input": "{{user_request}}", "output_key": "a" },
+    { "step": "b", "agent": "agents/echo-b.md", "input": "{{user_request}}\n{{a}}", "output_key": "b" }
+  ]
+}

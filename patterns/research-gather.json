@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "name": "research-gather",
+    "stage": "research",
+    "entry": "__P__researcher",
+    "exits": [
+      { "label": "enough", "node": "__P__out" },
+      { "label": "need_clarify", "node": "__P__clarify" }
+    ],
+    "routers": ["__P__gate"],
+    "router_labels": {
+      "__P__gate": ["enough", "need_clarify"]
+    },
+    "fallback": "Khi không chắc, gate mặc định 'enough' (proceed sang plan) — nhánh an toàn; KHÔNG có cycle nên không cần back-edge, host cấp max_steps làm cầu dao chung.",
+    "note": "Placeholder __P__ CHỈ ở node.id + edge.from/to. researcher gom thông tin → gate quyết đủ/thiếu. 'need_clarify' đi sang biên clarify-gate; 'enough' đi sang plan. Data key (input/output_key) là tên thật; host lo namespace khi ghép nhiều pattern. Host bind agent agents/<stamped-id>.md + cấp name/entry/max_steps."
+  },
+  "nodes": [
+    { "id": "__P__researcher", "type": "work",   "input": "{{user_request}}",  "output_key": "research" },
+    { "id": "__P__gate",       "type": "router", "input": "{{research}}",       "output_key": "research_gate" },
+    { "id": "__P__out",        "type": "work",   "input": "{{research}}",       "output_key": "research_result" },
+    { "id": "__P__clarify",    "type": "work",   "input": "{{research}}",       "output_key": "clarify_request" }
+  ],
+  "edges": [
+    { "from": "__P__researcher", "to": "__P__gate" },
+    { "from": "__P__gate", "to": "__P__out",     "when": "enough" },
+    { "from": "__P__gate", "to": "__P__clarify", "when": "need_clarify" }
+  ]
+}

@@ -1,0 +1,28 @@
+graph TD
+    rg_researcher["rg_researcher →research"]
+    rg_gate{"rg_gate →research_gate"}
+    cg_gate{"cg_gate →clarify_gate"}
+    pd_planner["pd_planner →plan"]
+    pd_classify{"pd_classify →plan_depth"}
+    dv_builder["dv_builder →build"]
+    dv_tester["dv_tester →test"]
+    dv_verdict{"dv_verdict →verdict"}
+    eg_gate{"eg_gate →escalate_gate"}
+    eg_user["eg_user →escalation_report"]
+    record["record →record_result"]
+    rg_researcher --> rg_gate
+    rg_gate -->|enough| pd_planner
+    rg_gate -->|need_clarify| cg_gate
+    cg_gate -->|ok| pd_planner
+    cg_gate -->|missing_input| eg_gate
+    pd_planner --> pd_classify
+    pd_classify -->|long| dv_builder
+    pd_classify -->|short| dv_builder
+    dv_builder --> dv_tester
+    dv_tester --> dv_verdict
+    dv_verdict -->|pass| record
+    dv_verdict -->|fail| pd_planner
+    dv_verdict -->|clarify| pd_planner
+    dv_verdict -->|escalate| eg_gate
+    eg_gate -->|resolved| record
+    eg_gate -->|escalate| eg_user

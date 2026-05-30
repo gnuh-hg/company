@@ -1,0 +1,11 @@
+{
+  "goal": "Plan hỏng — done_criteria thiếu cách kiểm đo được",
+  "revision": 0,
+  "steps": [
+    { "action": "Làm gì đó" }
+  ],
+  "done_criteria": [
+    { "note": "xong là được" }
+  ],
+  "open_questions": []
+}

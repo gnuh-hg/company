@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "name": "clarify-gate",
+    "stage": "research→plan (biên)",
+    "entry": "__P__gate",
+    "exits": [
+      { "label": "ok", "node": "__P__out" },
+      { "label": "missing_input", "node": "__P__escalate" }
+    ],
+    "routers": ["__P__gate"],
+    "router_labels": {
+      "__P__gate": ["ok", "missing_input"]
+    },
+    "fallback": "Mặc định 'ok' (proceed sang plan) — chỉ rẽ 'missing_input' khi info thiếu THẬT, KHÔNG hỏi mặc định. Nhánh an toàn = ok; KHÔNG có cycle, host cấp max_steps làm cầu dao chung.",
+    "note": "Placeholder __P__ CHỈ ở node.id + edge.from/to. Gate kiểm tra info đủ để lập kế hoạch chưa: 'ok' sang plan, 'missing_input' escalate xin bổ sung. Gate là entry (router làm node vào — precedent branchy). Data key là tên thật; host lo namespace. Host bind agent agents/<stamped-id>.md + cấp name/entry/max_steps."
+  },
+  "nodes": [
+    { "id": "__P__gate",     "type": "router", "input": "{{user_request}}", "output_key": "clarify_gate" },
+    { "id": "__P__out",      "type": "work",   "input": "{{user_request}}", "output_key": "clarify_result" },
+    { "id": "__P__escalate", "type": "work",   "input": "{{user_request}}", "output_key": "clarify_escalation" }
+  ],
+  "edges": [
+    { "from": "__P__gate", "to": "__P__out",      "when": "ok" },
+    { "from": "__P__gate", "to": "__P__escalate", "when": "missing_input" }
+  ]
+}
