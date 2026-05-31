@@ -23,9 +23,9 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 1 | 17% |
+| Sessions hoàn thành | 6 | 2 | 33% |
 | Scaffold app (Vite+React+Tailwind+ReactFlow+dagre) | 1 | 1 | 100% |
-| Data-layer (engine `-Json` + API projects/graph) | 1 | 0 | 0% |
+| Data-layer (engine `-Json` + API projects/graph) | 1 | 1 | 100% |
 | Render graph (4 node + cạnh + nhãn + back-edge + dagre) | 1 | 0 | 0% |
 | Tương tác (zoom/pan/drag) | 1 | 0 | 0% |
 | Persist layout (`.layout.json` GET/POST, coordinate-free) | 1 | 0 | 0% |
@@ -36,10 +36,10 @@
 
 ## Đang ở đâu
 
-- **Phase**: E — App I: workflow viewer (#4). **E.1 DONE** (2026-05-31). Đang thực thi trong worktree `phase-e-1-scaffold`.
-- **Session kế tiếp**: **E.2** — Data-layer: engine `run.ps1 graph <proj> -Json` (additive, reuse `Get-Graph`) + server `GET /api/projects` + `GET /api/graph?project=`. ⚠️ Session CHẠM engine → áp regression chuẩn (validate hello=0 · run hello -Mock=done · selftest PASS) + giữ output ASCII/Mermaid cũ y nguyên.
-- **Blocker**: — (Phase E chỉ phụ thuộc Phase B = surface ổn định; B đã DONE. KHÔNG cần Phase D cho viewer).
-- **Reference**: `PLAN.md` Phase E → Session E.2.
+- **Phase**: E — App I: workflow viewer (#4). **E.1 + E.2 DONE** (2026-05-31). Làm trực tiếp trên `main` (KHÔNG worktree — worktree E.1 cũ đã mất, scaffold `app/` vẫn còn trên đĩa nên tái dùng).
+- **Session kế tiếp**: **E.3** — React Flow render: `GraphView` fetch `/api/graph?project=` → map React Flow nodes/edges; custom node 4-loại (worker rect / router diamond / **approval hexagon ⏸** / terminal no-out) + nhãn `when` + back-edge phân biệt + **dagre** auto-layout (rankdir TB) + project picker từ `/api/projects`. Verify `hq` 11 node/17 cạnh đúng topo + `approval-demo` hexagon. App-only → `git diff engine/` PHẢI rỗng (đừng đụng engine).
+- **Blocker**: — (data-layer E.2 đã sẵn: `/api/projects` + `/api/graph?project=` chạy thật).
+- **Reference**: `PLAN.md` Phase E → Session E.3.
 - **⚠️ Carry hạ tầng**: pwsh `/snap/bin/pwsh` core-dump teardown (đọc output, không tin exit code) · `workflow.json` = UTF-16 (dùng engine `-Json`, không JS-parse) · file `engine/*.ps1` có thể UTF-16 (dùng pwsh/`iconv` để soi nếu `grep` trả rỗng).
 
 ---
@@ -61,14 +61,12 @@
 - **Next**: Session E.2 — engine `graph -Json` additive + server `/api/projects`+`/api/graph`.
 - **Notes**: Tailwind pin v3 (không v4) để khớp plan (config file + postcss plugin). React Flow package = `@xyflow/react` (v12, kế thừa `reactflow` v11). Worktree `phase-e-1-scaffold`; `plan/hq-improve/phase-e/` untracked ở main nên copy vào worktree để cập nhật cùng nhánh. Server port mặc định 5179 (dev Vite proxy 5173→5179).
 
-<!--
-### YYYY-MM-DD — Session E.x
-- **Done**: <làm gì>
-- **Output**: <file/artifact>
-- **Gate**: pass/fail + metric (vd "hq render 11 node/17 cạnh"; "git diff workflow.json rỗng"; "regression selftest PASS")
-- **Next**: Session E.(x+1)
-- **Notes**: <vấn đề phát sinh>
--->
+### 2026-05-31 — Session E.2 — Data-layer: engine `-Json` + API graph/projects
+- **Done**: (1) **Engine additive** — `run.ps1 graph <proj> -Json`: thêm flag `-Json` vào `Split-DispatchArgs` (init + switch arm + cả 2 return hashtable) + nhánh JSON trong dispatch `graph` (reuse `Get-Graph`, emit `{entry,max_steps,nodes:[{id,agent,type,prompt?}],edges:[{from,to,when?}]}`). **Bug bắt+fix**: output ban đầu rỗng vì footer `$code = Invoke-Dispatch $args` nuốt pipeline output → ghi thẳng bằng `[Console]::Out.WriteLine($jsonText)` thay vì để rơi xuống pipeline. (2) **Server** `server.mjs` — thêm `GET /api/projects` (quét `projects/`>`examples/`>`hq`, lọc có `workflow.json`, dedup theo precedence) + `GET /api/graph?project=` (spawn `pwsh run.ps1 graph <p> -Json`, tin stdout không tin exit-code, path-guard regex `^[A-Za-z0-9._-]+$`).
+- **Output**: `engine/run.ps1` (+21 dòng, BOM/CRLF giữ nguyên) + `app/server.mjs` (3 endpoint mới).
+- **Gate**: PASS. Engine direct `-Json` 5/5 project: `hq`=11n/17e/5router/entry=coo/max=40, `loopy`=4n/4e, `branchy`=6n/8e, `hello`=2n/1e (pipeline-v1 reuse loader ✓), `approval-demo`=3n/2e types=`approval|work` ✓. Server: health ok · `/api/projects`=18 project (đủ hq/loopy/branchy/hello/approval-demo) · `/api/graph?project=hq`=11/17 · `approval-demo`=approval|work · missing-param=400 · bad-name=`invalid project name`. **Regression chuẩn**: validate hello=exit0 · run hello -Mock=done · graph hq ASCII+Mermaid path y nguyên · **selftest 12/12 PASS**. Scope: `git diff engine/`=chỉ `run.ps1` · không `.mmd`/`workflow.json` đổi · `app/` untracked.
+- **Next**: Session E.3 — React Flow render + dagre + project picker.
+- **Notes**: ⚠️ Đầu session phát hiện worktree `phase-e-1-scaffold` (E.1) đã mất — NHƯNG `app/` scaffold vẫn còn trên đĩa (untracked, gitignore nuốt node_modules/dist nên git tưởng mất). E.1 thực chất còn nguyên + server health re-verify PASS → KHÔNG re-scaffold, chỉ làm tiếp E.2 trên `main`. Patch engine dùng Python (giữ BOM `utf-8-sig` + CRLF) với anchor-count guard (abort nếu ≠1) thay vì Edit tool để an toàn encoding. `pwsh` qua `/bin/bash --noprofile --norc` (profile zsh gây nhiễu) — đọc output file, không tin exit code.
 
 ---
 
@@ -77,3 +75,4 @@
 | Date | Action | By |
 | --- | --- | --- |
 | 2026-05-31 | Created from `PLAN.md` (3 sub-phase / 6 session). Chốt stack React+Vite+Tailwind+ReactFlow+dagre (REVISE D-1) + persist `.layout.json`+server-POST (user 2026-05-31) | @claude |
+| 2026-05-31 | E.2 DONE — engine `graph -Json` additive + server `/api/projects`+`/api/graph`; selftest 12/12; engine diff = chỉ run.ps1 | @claude |

@@ -1,4 +1,4 @@
-# run.ps1 — dispatcher: parse command → gọi module
+﻿# run.ps1 — dispatcher: parse command → gọi module
 # Implement Session 3.1.
 #
 # Surface lệnh duy nhất (QĐ-3):  ./run.ps1 <command> <project> [args]
@@ -117,7 +117,7 @@ function Resolve-ProjectDir {
 function Split-DispatchArgs {
     param([string[]]$RawArgs)
     # [string[]] @() bị PowerShell ép về $null → guard trước khi đụng .Count (StrictMode).
-    if ($null -eq $RawArgs) { return @{ Positional = @(); Mock = $false; Model = $null; Real = $false; Router = $null; KeepSandbox = $false; Seed = $null; Branch = $null; Decision = $null; AutoApprove = $false } }
+    if ($null -eq $RawArgs) { return @{ Positional = @(); Mock = $false; Model = $null; Real = $false; Router = $null; KeepSandbox = $false; Seed = $null; Branch = $null; Decision = $null; AutoApprove = $false; Json = $false } }
     $pos         = [System.Collections.Generic.List[string]]::new()
     $mock        = $false
     $model       = $null
@@ -128,6 +128,7 @@ function Split-DispatchArgs {
     $branch      = $null
     $decision    = $null
     $autoApprove = $false
+    $json        = $false
     for ($i = 0; $i -lt $RawArgs.Count; $i++) {
         $a = $RawArgs[$i]
         switch -Regex ($a) {
@@ -135,6 +136,7 @@ function Split-DispatchArgs {
             '^-Real$'        { $real = $true }
             '^-KeepSandbox$' { $keep = $true }
             '^-AutoApprove$' { $autoApprove = $true }
+            '^-Json$'        { $json = $true }
             '^-Model$'       { $i++; if ($i -lt $RawArgs.Count) { $model = $RawArgs[$i] }    else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
             '^-Router$'      { $i++; if ($i -lt $RawArgs.Count) { $router = $RawArgs[$i] }   else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
             '^-Seed$'        { $i++; if ($i -lt $RawArgs.Count) { $seed = $RawArgs[$i] }     else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
@@ -143,7 +145,7 @@ function Split-DispatchArgs {
             default          { $pos.Add($a) }
         }
     }
-    return @{ Positional = $pos.ToArray(); Mock = $mock; Model = $model; Real = $real; Router = $router; KeepSandbox = $keep; Seed = $seed; Branch = $branch; Decision = $decision; AutoApprove = $autoApprove }
+    return @{ Positional = $pos.ToArray(); Mock = $mock; Model = $model; Real = $real; Router = $router; KeepSandbox = $keep; Seed = $seed; Branch = $branch; Decision = $decision; AutoApprove = $autoApprove; Json = $json }
 }
 
 function Invoke-Dispatch {
@@ -267,6 +269,27 @@ function Invoke-Dispatch {
             return 0
         }
         'graph' {
+            if ($parsed.Json) {
+                # E.2: additive JSON emit của graph chuẩn hoá (reuse Get-Graph;
+                # nhánh ASCII/Mermaid bên dưới giữ nguyên — chỉ rẽ khi có -Json).
+                $g = Get-Graph $projectDir
+                $nodesOut = @($g.nodes | ForEach-Object {
+                    $o = [ordered]@{ id = $_.id; agent = $_.agent; type = $_.type }
+                    if (-not [string]::IsNullOrWhiteSpace([string]$_.prompt)) { $o['prompt'] = $_.prompt }
+                    [pscustomobject]$o
+                })
+                $edgesOut = @($g.edges | ForEach-Object {
+                    $o = [ordered]@{ from = $_.from; to = $_.to }
+                    if (-not [string]::IsNullOrWhiteSpace([string]$_.when)) { $o['when'] = $_.when }
+                    [pscustomobject]$o
+                })
+                $payload = [ordered]@{ entry = $g.entry; max_steps = $g.max_steps; nodes = $nodesOut; edges = $edgesOut }
+                $jsonText = [pscustomobject]$payload | ConvertTo-Json -Depth 12
+                # Ghi thẳng ra stdout (KHÔNG qua pipeline) — direct-run footer dùng
+                # `$code = Invoke-Dispatch` nên output pipeline sẽ bị nuốt vào $code.
+                [Console]::Out.WriteLine($jsonText)
+                return 0
+            }
             Show-Workflow $projectDir
             $outArg = if ($pos.Count -ge 2) { $pos[1] } else { $null }
             $out = Export-WorkflowMermaid $projectDir $outArg
