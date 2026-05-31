@@ -17,6 +17,7 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const [runStatus, setRunStatus] = useState('idle'); // idle|running|done|awaiting|failed
   const [runErr, setRunErr] = useState(null);
+  const [request, setRequest] = useState(''); // the task/prompt fed to the run (esp. HQ)
   const esRef = useRef(null);
 
   // Real-run guard + decision state
@@ -61,7 +62,7 @@ export default function App() {
     fetch('/api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: selected, mock }),
+      body: JSON.stringify({ project: selected, mock, request: request.trim() || undefined }),
     })
       .then(r => r.ok ? r.json() : r.json().then(b => Promise.reject(b.error ?? r.statusText)))
       .then(({ runId: rid }) => {
@@ -90,8 +91,9 @@ export default function App() {
         es.addEventListener('end', () => {
           es.close();
           esRef.current = null;
-          // run_end should have set status; guard against edge case
-          setRunStatus(prev => prev === 'running' ? 'done' : prev);
+          // run_end sets the final status; if the stream ended while still
+          // 'running' the run stopped without completing → treat as failed.
+          setRunStatus(prev => prev === 'running' ? 'failed' : prev);
         });
 
         es.onerror = () => {
@@ -213,6 +215,26 @@ export default function App() {
             ))}
           </select>
         )}
+
+        {/* Request input — the task/context fed to the run. HQ needs this to route
+            sensibly; mock runs ignore it. Enter triggers the run. */}
+        <input
+          type="text"
+          value={request}
+          onChange={e => setRequest(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') handleRunClick(); }}
+          disabled={runStatus === 'running'}
+          placeholder="request / task (e.g. build a landing page with email signup)"
+          title="The task description sent to the run. Required for HQ to route meaningfully; ignored by mock runs."
+          style={{
+            flex: 1, minWidth: 160, maxWidth: 520,
+            marginLeft: 8, padding: '4px 10px',
+            fontSize: 13, fontFamily: 'monospace',
+            border: '1px solid #cbd5e1', borderRadius: 6,
+            background: runStatus === 'running' ? '#f1f5f9' : '#fff',
+            color: '#334155',
+          }}
+        />
 
         {/* Run button */}
         <button

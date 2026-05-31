@@ -18,7 +18,13 @@ import { spawn } from 'node:child_process';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = join(__dirname, 'dist');
 const COMPANY = resolve(__dirname, '..');
-const ENGINE_RUN = join(COMPANY, 'engine', 'run.ps1');
+const ENGINE_DIR = join(COMPANY, 'engine');
+const ENGINE_RUN = join(ENGINE_DIR, 'run.ps1');
+// Spawn run.ps1 from engine/ (its documented cwd). From COMPANY, Resolve-ProjectDir
+// returns a *relative* dir for top-level projects whose name matches a child of
+// COMPANY (e.g. `hq`) — that relative system-prompt path then mis-resolves once
+// claude's cwd is pushed to the project dir (→ `hq/hq/agents/coo.md`). Engine cwd
+// makes the path $here-anchored (absolute), so it resolves correctly.
 const PWSH = process.env.PWSH || 'pwsh';
 const PORT = Number(process.env.PORT) || 5179;
 const SAFE_PROJECT = /^[A-Za-z0-9._-]+$/;
@@ -26,29 +32,40 @@ const SAFE_PROJECT = /^[A-Za-z0-9._-]+$/;
 // Run registry: Map<runId → {child, project, runDir, mockMode, status, startedAt}>
 const runRegistry = new Map();
 
-// Read the current run pointer from <projectDir>/.runs/latest.json (null if absent).
-async function snapshotLatestRun(projectDir) {
-  try {
-    const raw = await readFile(join(projectDir, '.runs', 'latest.json'), 'utf-8');
-    return JSON.parse(raw).run || null;
-  } catch { return null; }
+// Collect a bounded tail of a child's stdout+stderr (also drains the pipes so the
+// child never blocks). Lets the SSE stream surface an engine error that was only
+// printed to stdout — e.g. a router label that matched no edge — on abnormal exit.
+function attachTail(child, tailRef, cap = 4000) {
+  const onData = (d) => { tailRef.text = (tailRef.text + d.toString('utf-8')).slice(-cap); };
+  child.stdout.on('data', onData);
+  child.stderr.on('data', onData);
 }
 
-// Poll latest.json until its `run` field differs from prevRun (new run appeared).
-// Returns the new run-id string, or null on timeout.
-async function pollForNewRunDir(projectDir, prevRun, timeoutMs = 10000, intervalMs = 200) {
+// Set of timestamped run-dir names under <projectDir>/.runs/ (excludes latest.json).
+async function listRunDirs(projectDir) {
+  try {
+    const names = await readdir(join(projectDir, '.runs'));
+    return new Set(names.filter(n => /^\d{8}-\d{6}/.test(n)));
+  } catch { return new Set(); }
+}
+
+// Poll the .runs/ listing until a run dir that wasn't in `prevDirs` appears, and
+// return its name. The engine creates the run dir + events.ndjson at run START
+// (not completion), so this resolves in well under a second for both mock and
+// real runs — and crucially does NOT wait for latest.json, which is only written
+// when the run finishes (a slow real LLM node can far exceed any sane timeout).
+// Returns the new run-id, or null if no new dir appears (genuine spawn failure).
+async function pollForNewRunDir(projectDir, prevDirs, timeoutMs = 10000, intervalMs = 200) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve) => {
     const timer = setInterval(async () => {
-      try {
-        const raw = await readFile(join(projectDir, '.runs', 'latest.json'), 'utf-8');
-        const latest = JSON.parse(raw);
-        if (latest.run && latest.run !== prevRun) {
-          clearInterval(timer);
-          resolve(latest.run);
-          return;
-        }
-      } catch {}
+      const now = await listRunDirs(projectDir);
+      const fresh = [...now].filter(d => !prevDirs.has(d)).sort();
+      if (fresh.length > 0) {
+        clearInterval(timer);
+        resolve(fresh[fresh.length - 1]); // newest
+        return;
+      }
       if (Date.now() >= deadline) {
         clearInterval(timer);
         resolve(null);
@@ -125,7 +142,7 @@ function getGraphJson(project) {
     }
     let child;
     try {
-      child = spawn(PWSH, ['-NoProfile', '-File', ENGINE_RUN, 'graph', project, '-Json'], { cwd: COMPANY });
+      child = spawn(PWSH, ['-NoProfile', '-File', ENGINE_RUN, 'graph', project, '-Json'], { cwd: ENGINE_DIR });
     } catch (e) {
       return res({ ok: false, status: 500, error: `cannot spawn ${PWSH}: ${e.message}` });
     }
@@ -237,7 +254,7 @@ const server = createServer(async (req, res) => {
     const projectDir = await resolveProjectDir(project);
     if (!projectDir) return sendJson(res, 404, { error: 'project not found' });
 
-    const prevRun = await snapshotLatestRun(projectDir);
+    const prevDirs = await listRunDirs(projectDir);
 
     // Engine requires a non-empty request string; default to "run" when omitted.
     const reqStr = (request && String(request).trim()) || 'run';
@@ -246,21 +263,25 @@ const server = createServer(async (req, res) => {
     if (autoApprove) args.push('-AutoApprove');
 
     let child;
-    try { child = spawn(PWSH, args, { cwd: COMPANY }); }
+    try { child = spawn(PWSH, args, { cwd: ENGINE_DIR }); }
     catch (e) { return sendJson(res, 500, { error: `cannot spawn pwsh: ${e.message}` }); }
-    // Drain stdout/stderr so the child never blocks on a full pipe.
-    child.stdout.resume();
-    child.stderr.resume();
+    // Collect a bounded tail of stdout/stderr (also drains the pipes). Some engine
+    // failures (e.g. router label matching no edge) are printed to stdout and never
+    // written to events.ndjson — the SSE stream surfaces this tail on abnormal exit.
+    const tailRef = { text: '' };
+    attachTail(child, tailRef);
 
-    const newRunId = await pollForNewRunDir(projectDir, prevRun);
+    // Detect the run dir as soon as it appears (run start) — do NOT kill the child
+    // on a slow node: the SSE stream reports progress and any failure live.
+    const newRunId = await pollForNewRunDir(projectDir, prevDirs);
     if (!newRunId) {
       try { child.kill(); } catch {}
-      return sendJson(res, 504, { error: 'run dir not detected within timeout' });
+      return sendJson(res, 504, { error: 'run dir not detected — the engine failed to start (check that pwsh is on PATH)' });
     }
 
     const runDir = join(projectDir, '.runs', newRunId);
     runRegistry.set(newRunId, {
-      child, project, runDir,
+      child, project, runDir, tailRef,
       mockMode: mock !== false,
       status: 'running',
       startedAt: new Date().toISOString(),
@@ -299,6 +320,9 @@ const server = createServer(async (req, res) => {
     let offset = 0;
     let pending = Buffer.alloc(0);
     let ended = false;
+    let sawRunEnd = false;
+    let lastType = null;
+    let maxSeq = -1;
 
     const finish = () => {
       if (ended) return;
@@ -315,29 +339,50 @@ const server = createServer(async (req, res) => {
       let size;
       try { size = (await stat(eventsPath)).size; }
       catch { return; } // file not created yet
-      if (size <= offset) return;
-      let fh;
-      try {
-        fh = await open(eventsPath, 'r');
-        const len = size - offset;
-        const buf = Buffer.alloc(len);
-        await fh.read(buf, 0, len, offset);
-        offset = size;
-        pending = Buffer.concat([pending, buf]);
-      } catch { return; }
-      finally { if (fh) await fh.close(); }
+      if (size > offset) {
+        let fh;
+        try {
+          fh = await open(eventsPath, 'r');
+          const len = size - offset;
+          const buf = Buffer.alloc(len);
+          await fh.read(buf, 0, len, offset);
+          offset = size;
+          pending = Buffer.concat([pending, buf]);
+        } catch { return; }
+        finally { if (fh) await fh.close(); }
 
-      const lastNl = pending.lastIndexOf(0x0a);
-      if (lastNl === -1) return;
-      const complete = pending.subarray(0, lastNl + 1).toString('utf-8');
-      pending = pending.subarray(lastNl + 1);
-      for (const raw of complete.split('\n')) {
-        const line = raw.trim();
-        if (!line) continue;
-        res.write('data: ' + line + '\n\n');
-        let evt;
-        try { evt = JSON.parse(line); } catch { continue; }
-        if (evt.type === 'run_end') { finish(); return; }
+        const lastNl = pending.lastIndexOf(0x0a);
+        if (lastNl !== -1) {
+          const complete = pending.subarray(0, lastNl + 1).toString('utf-8');
+          pending = pending.subarray(lastNl + 1);
+          for (const raw of complete.split('\n')) {
+            const line = raw.trim();
+            if (!line) continue;
+            res.write('data: ' + line + '\n\n');
+            let evt;
+            try { evt = JSON.parse(line); } catch { continue; }
+            lastType = evt.type;
+            if (typeof evt.seq === 'number' && evt.seq > maxSeq) maxSeq = evt.seq;
+            if (evt.type === 'run_end') { sawRunEnd = true; finish(); return; }
+          }
+        }
+      }
+
+      // Abnormal exit: the child process ended but never wrote a run_end event and
+      // is not paused at an approval gate (which resume will continue). The engine
+      // throws on some failures — e.g. a router label matching no edge — printing
+      // the reason to stdout only. Surface it as a synthetic failed run_end so the
+      // log shows the cause instead of hanging on the last node.
+      const reg = runRegistry.get(run);
+      if (reg && reg.status === 'closed' && !sawRunEnd && lastType !== 'awaiting') {
+        const reason = (reg.tailRef?.text || '').trim();
+        const synthetic = {
+          seq: maxSeq + 1, ts: new Date().toISOString(), type: 'run_end', status: 'failed',
+          error: reason || 'Run ended before completing (no run_end event was written).',
+        };
+        res.write('data: ' + JSON.stringify(synthetic) + '\n\n');
+        sawRunEnd = true;
+        finish();
       }
     };
 
@@ -381,10 +426,11 @@ const server = createServer(async (req, res) => {
     if (mockMode) args.push('-Mock');
 
     let child;
-    try { child = spawn(PWSH, args, { cwd: COMPANY }); }
+    try { child = spawn(PWSH, args, { cwd: ENGINE_DIR }); }
     catch (e) { return sendJson(res, 500, { error: `cannot spawn pwsh: ${e.message}` }); }
-    child.stdout.resume();
-    child.stderr.resume();
+    const resumeTail = entry?.tailRef ?? { text: '' };
+    resumeTail.text = '';
+    attachTail(child, resumeTail);
     if (entry) {
       entry.child = child;
       entry.status = 'running';

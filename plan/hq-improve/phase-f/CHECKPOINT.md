@@ -19,24 +19,42 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 5 | 83% |
-| Sub-phase đóng | 3 (F-I/F-II/F-III) | 2 (F-I, F-II) | 67% |
+| Sessions hoàn thành | 6 | 6 | 100% |
+| Sub-phase đóng | 3 (F-I/F-II/F-III) | 3 | 100% |
 | Server endpoint F | 3 (`/api/run`, `/api/events` SSE, `/api/decision`) | 3 | 100% |
-| Done-gate F (HQ mock: live log + highlight → gate → approve → terminal; + reject/đổi nhánh) | pass | — | — |
-| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2·F.3·F.4·F.5 | — |
+| Done-gate F (HQ mock: live log + highlight → gate → approve → terminal; + reject/đổi nhánh) | pass | ✅ F.5 verified server-driven (approval-demo mock awaiting→approve→terminal) | — |
+| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2·F.3·F.4·F.5·F.6 | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: F — **Session F.5 DONE** (2026-06-01). Approval gate UI + Real-run confirm dialog (app-only — server đã đủ từ F.1/F.2).
-- **Session kế tiếp**: **F.6** — Polish + docs (README/CLAUDE.md/ROADMAP §Bàn-giao-F→G) + USER GATE đóng phase. F.6 chạy full done-gate trên app live (npm run dev): HQ/approval-demo mock → live log + highlight → gate → approve → terminal + reject/đổi nhánh; Real toggle → dialog chặn.
-- **Blocker**: — (F.5 verified server-level: approval-demo mock → awaiting `node:gate`,`choices:[approve]`,`prompt` → POST decision approve → resumed→builder→run_end done; build OK 489 modules; engine diff RỖNG; regression 12/12).
-- **Reference**: `PLAN.md` Phase F → Session F.6.
+- **Phase**: F — **✅ PHASE F ĐÓNG (user duyệt 2026-06-01)**. Done-gate đạt đủ; live UX hardening hoàn tất sau F.6.
+- **Session kế tiếp**: — (Phase F đóng). Nếu tiếp theo → **Phase G** (in-app edit, tuỳ chọn). Watch-item bàn giao: HQ agent/router robustness (router trả nhãn ngoài tập `when` → hard-fail) — KHÔNG thuộc app, là việc engine/agent-content phase sau.
+- **Blocker**: —
+- **Reference**: ROADMAP §Bàn-giao-F→G.
 
 ---
 
 ## Per-session log
+
+### 2026-06-01 — F.6-followup (live UX hardening qua user gate) + ĐÓNG PHASE
+- **Bối cảnh**: User chạy thử trên `npm run serve` (live), lộ 3 lỗi run-control + 1 gap UX mà mock-only của F.1–F.6 không bắt. Tất cả **app-only** (`git diff engine/` vẫn RỖNG).
+- **Done**:
+  1. **cwd spawn** (`server.mjs`) — spawn `run.ps1` từ `cwd: ENGINE_DIR` thay vì `COMPANY`. Từ COMPANY, `Resolve-ProjectDir hq` trả path **tương đối** `hq` (vì `Test-Path hq` đúng) → real claude CLI (sau Push-Location sang project dir) resolve `--system-prompt-file` thành `hq/hq/agents/coo.md` (DOUBLE) → "file not found". Engine-anchored từ engine cwd → hết. Chỉ `hq` dính (tên trùng thư mục con); mock không lộ (không gọi claude thật).
+  2. **discovery dir-based** (`server.mjs`) — `pollForNewRunDir` cũ poll `latest.json` (chỉ ghi khi XONG) → real run >10s → timeout → `child.kill()` **giết run thật giữa chừng** + báo 422 sai. Sửa: phát hiện **run dir mới** (tạo lúc START) qua `listRunDirs` diff → trả runId <1s, không kill run chậm.
+  3. **abnormal-end surfacing** (`server.mjs`+`RunLog.jsx`) — engine throw ở edge-select (router-mismatch) KHÔNG ghi `run_end` vào events/state.json (chỉ in stdout) → SSE treo. Sửa: `attachTail` thu stdout/stderr child; khi child đóng mà chưa `run_end` và không `awaiting` → phát synthetic `run_end failed` (seq=maxSeq+1) kèm lý do thật từ stdout → đóng stream. `RunLog` run_end hiện `error` (pre đỏ, maxHeight 200). App end-handler: stream kết thúc lúc 'running' → 'failed' (không bịa 'done').
+  4. **ô nhập request** (`App.jsx`) — header thêm `<input>` request (Enter=run) → gửi `request` trong POST `/api/run` (server vốn nhận sẵn, App chưa gửi). Sửa "hq không rõ bối cảnh" (trước chạy default `"run"`). Verified: chuỗi nhập tới đúng `1-coo.prompt.txt`.
+- **Output**: `app/server.mjs` (attachTail/listRunDirs/dir-discovery/SSE abnormal-end, bỏ snapshotLatestRun) + `app/src/App.jsx` (request input + end→failed) + `app/src/RunLog.jsx` (run_end error display). Build OK.
+- **Gate**: ✅ Verified qua server thật (port 5204/5205): **hello** mock→run_end done · **hq** mock→stream coo live→synthetic `run_end failed` với lý do router thật · **approval-demo** mock→awaiting (stream giữ mở, no false-end)→POST decision approve→`resumed`→terminal `run_end done`→`event: end` (HITL trọn vòng) · request "build a landing page…"→coo prompt nhận đúng · **Real hq** (user)→coo done 190ch + escalate_gate done 620ch (path bug HẾT). ✅ `git diff engine/` RỖNG · selftest **12/12** · validate hello=0 · run hello -Mock=done · `server.mjs` dependency-free.
+- **Watch-item bàn giao (KHÔNG phải Phase F)**: real router (vd `escalate_gate`) có thể trả nhãn ngoài tập `when` → engine hard-fail. Là độ-bền prompt agent HQ + router resilience (engine) → **phase sau**. Triệu chứng giảm khi có request rõ (happy-path không chạm escalate).
+- **USER DUYỆT ĐÓNG PHASE 2026-06-01.**
+
+### 2026-06-01 — Session F.6 (polish + docs + USER GATE)
+- **Done**: F.6 — polish nhỏ + docs đầy đủ + regression xanh. (1) **RunLog.jsx** — fix loading state khi `events.length === 0 && runStatus === 'running'`: hiện "⏳ Starting run…" thay vì "No events yet. Press Run (Mock) to start." (2) **README.md** — rename section → "App — Workflow viewer + live log + duyệt (Phase E+F)": giữ Phase E, thêm Phase F (tính năng live log/highlight/approval/Real-guard), cập nhật bảng Files app (ApprovalPanel/RealConfirmDialog/RunLog/nodes+ring mới), cập nhật dir tree + status line (E+F ✅). (3) **ROADMAP** — bảng tiến độ F → ✅ DONE + thêm §Bàn-giao-F→G (bảng cross-cut + server endpoint đầy đủ sau F). (4) **CLAUDE.md** — row `phase-f` → ✅ DONE. (5) **Regression**: `validate hello`=0 · `run hello -Mock`=done · `selftest` **12/12 PASS** · `git diff engine/` RỖNG · build 489 modules OK.
+- **Output**: `RunLog.jsx` (patch) + `README.md` (E+F section) + `ROADMAP.md` (F ✅ + §Bàn-giao-F→G) + `CLAUDE.md` (row) + `CHECKPOINT.md` (phase đóng).
+- **Gate**: ✅ regression 12/12 · engine diff RỖNG · build OK · docs cập nhật đủ. Done-gate F verified F.5 server-driven (approval-demo mock awaiting→approve→terminal). App live UX verify = user gate (xem note).
+- **Notes**: F.6 verify bằng user gate UX thực tế (`npm run dev`): bấm Run (Mock) → log live + node sáng → approval panel → approve → terminal. Server dev chạy trên port thay đổi mỗi session (PORT env) — user cần `cd app && npm run dev` từ terminal riêng. Regression chuẩn (không UX) đã xanh.
 
 ### 2026-06-01 — Session F.5 (approval gate UI + Real-run confirm dialog)
 - **Done**: HITL UI + Real guard, app-only (server `/api/run` nhận `mock:false`, `/api/decision` nhận label — đủ từ F.1/F.2, KHÔNG đụng server). (1) **`ApprovalPanel.jsx`** (mới) — render khi `awaiting`: prompt + `node` + 1 nút mỗi `choices[]` label (choice[0]=happy-path filled tím, còn lại outlined → đổi-nhãn/reject); `violations[]` (diff_violation) hiện trong khối cam trước khi duyệt (CC-b); `pending` disable nút + "resuming…". (2) **`RealConfirmDialog.jsx`** (mới) — modal overlay cảnh báo đốt token; Cancel→đóng (no spawn), "Run for real"→`handleRun(false)`. (3) **`App.jsx`** — state `realMode`/`showRealConfirm`/`decisionPending`; `handleRunClick` (Real→mở dialog · Mock→`handleRun(true)`); `handleRun(mock)` (param hoá body `{mock}`); `handleDecision(label)` POST `/api/decision {project,run:runId,decision}` → set running (panel ẩn, SSE đang mở chảy tiếp); derive `awaitingEvt`+`pendingViolations` từ events (useMemo, reset trên `resumed`); header thêm nút đổi nhãn Run (Mock/Real màu) + checkbox **Real** toggle; ApprovalPanel render trên RunLog khi `awaiting`; dialog render cuối.
@@ -99,3 +117,5 @@
 | 2026-05-31 | F.2 DONE — `GET /api/events` SSE (byte-offset tail, dependency-free) + `POST /api/decision` (resume nối-tiếp cùng run dir). Verified hello full chain + approval-demo awaiting→approve→terminal. `awaiting` shape = top-level. Engine diff RỖNG. Hạ tầng: node-spawn dùng PATH `pwsh` (snap pwsh SIGABRT) | @claude |
 | 2026-06-01 | F.4 DONE — highlight node live trên React Flow (running/done/awaiting): `nodeStatuses` derive từ events (App) → sync `node.data.runStatus` giữ layout (GraphView) → ring+badge+pulse (nodes.jsx/index.css). Sub-phase F-II ĐÓNG. Verified hello running→done + approval-demo awaiting(gate). Engine diff RỖNG; regression xanh | @claude |
 | 2026-06-01 | F.5 DONE — approval gate UI (`ApprovalPanel.jsx`: prompt+choices+diff_violation, đổi-nhãn/reject) + Real-run confirm dialog (`RealConfirmDialog.jsx`) + App wire (realMode/decision/awaitingEvt derive). App-only (server đủ từ F.1/F.2). Verified approval-demo mock awaiting→approve→terminal (server-driven). Build 489 modules; engine diff RỖNG; regression 12/12 | @claude |
+| 2026-06-01 | F.6 DONE — polish (RunLog loading state) + docs (README E+F section/§Bàn-giao-F→G/ROADMAP F✅/CLAUDE.md). Regression 12/12; engine diff RỖNG; build 489 modules | @claude |
+| 2026-06-01 | **F.6-followup + ĐÓNG PHASE (user duyệt)** — live UX hardening qua user gate (app-only, engine RỖNG): cwd spawn fix (hq double-path), dir-based run discovery (không kill real run chậm), SSE abnormal-end surfacing (synthetic failed run_end + stdout reason), request input (sửa "hq không rõ bối cảnh"). Verified server thật: hello done · hq mock failed-có-lý-do · approval-demo HITL trọn vòng · Real hq qua coo+escalate_gate. selftest 12/12. Watch-item phase sau: HQ router robustness | @claude |

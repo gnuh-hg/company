@@ -118,15 +118,28 @@ function EventRow({ evt }) {
   if (type === 'run_end') {
     const col = STATUS_COLOR[status] ?? '#64748b';
     return (
-      <Row style={{ marginTop: 2, borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
-        <Ts ts={ts} />
-        <span style={{ fontWeight: 700, fontSize: 12, color: col }}>■ {status}</span>
-        {terminal && (
-          <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>
-            terminal={terminal}
-          </span>
+      <div style={{ marginTop: 2, borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
+        <Row>
+          <Ts ts={ts} />
+          <span style={{ fontWeight: 700, fontSize: 12, color: col }}>■ {status}</span>
+          {terminal && (
+            <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>
+              terminal={terminal}
+            </span>
+          )}
+        </Row>
+        {evt.error && (
+          <pre style={{
+            margin: '4px 0 0 20px', padding: '6px 10px',
+            background: '#fff1f2', borderLeft: '3px solid #fecaca', borderRadius: 4,
+            fontSize: 11, fontFamily: 'monospace', whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word', color: '#b91c1c', lineHeight: 1.5,
+            maxHeight: 200, overflowY: 'auto',
+          }}>
+            {evt.error}
+          </pre>
         )}
-      </Row>
+      </div>
     );
   }
 
@@ -160,6 +173,8 @@ function EventRow({ evt }) {
 }
 
 // ── RunLog panel ────────────────────────────────────────────────────────────
+
+const HINT_STYLE = { color: '#94a3b8', fontSize: 12, marginTop: 8 };
 
 export default function RunLog({ events, runStatus, error, onClear }) {
   const bottomRef = useRef(null);
@@ -228,10 +243,10 @@ export default function RunLog({ events, runStatus, error, onClear }) {
             <strong>Run failed.</strong>{' '}
             {error ? error : 'No events received — the engine may have exited before writing the run directory.'}
           </div>
+        ) : events.length === 0 && runStatus === 'running' ? (
+          <div style={HINT_STYLE}>⏳ Starting run…</div>
         ) : events.length === 0 ? (
-          <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 8 }}>
-            No events yet. Press <strong>Run (Mock)</strong> to start.
-          </div>
+          <div style={HINT_STYLE}>No events yet — press <strong>▶ Run (Mock)</strong> to start.</div>
         ) : (
           events.map(evt => <EventRow key={evt.seq} evt={evt} />)
         )}

@@ -456,9 +456,10 @@ Node lặp được (loop) → state keyed theo **lượt thăm** (`seq`), khôn
 
 ---
 
-## App — Workflow viewer (Phase E)
+## App — Workflow viewer + live log + duyệt (Phase E + F)
 
-App web local (`company/app/`) đọc `workflow.json` qua engine `run.ps1 graph -Json` → vẽ graph tương tác (React + Vite + Tailwind + React Flow + dagre).
+App web local (`company/app/`) xem graph workflow tương tác, chạy run từ UI, theo dõi log live, duyệt gate HITL.
+Stack: React + Vite + Tailwind + React Flow + dagre. Server Node `http` thuần (dependency-free), bind `localhost`.
 
 ### Chạy app
 
@@ -468,42 +469,51 @@ cd company/app
 npm install          # lần đầu
 npm run dev          # → http://localhost:5173
 
-# Serve từ build (sau khi build)
+# Serve từ build
 npm run build
 node server.mjs      # → http://localhost:5179
 ```
 
 `server.mjs` cũng chạy độc lập (serve `dist/` đã build + API). Nếu chỉ đổi JS/CSS, build lại bằng `npm run build`.
 
-### Tính năng
+### Tính năng viewer (Phase E)
 
 - **Chọn project** từ dropdown (hiển thị toàn bộ project có `workflow.json` trong `projects/`, `examples/`, `hq/`).
 - **Vẽ graph tương tác**: 4 loại node (worker rect / router diamond ◇ / approval hexagon ⏸ / terminal); cạnh có hướng; nhãn `when` trên cạnh router; back-edge (loop) = dashed orange.
 - **Zoom / pan / kéo thả node** — scroll để zoom, kéo nền để pan, kéo node cá nhân để bố trí lại.
 - **Auto-layout dagre** mặc định (TB top-down). Nút **Reset layout** trên góc phải để quay về layout auto.
-- **Persist vị trí**: kéo node xong → vị trí tự lưu vào `<project>/.layout.json` (app-side, gitignored); reload giữ nguyên. Đổi project → load layout riêng của project đó.
-- **Metadata strip**: hiển thị `entry`, `#nodes`, `#edges`, `max_steps` của project đang xem.
+- **Persist vị trí**: kéo node xong → vị trí tự lưu vào `<project>/.layout.json` (app-side, gitignored); reload giữ nguyên.
+- **Metadata strip**: hiển thị `entry`, `#nodes`, `#edges`, `max_steps`.
+
+### Tính năng live log + run control + duyệt (Phase F)
+
+- **Ô request**: gõ task/ngữ cảnh cho run (vd "build a landing page with email signup"). **HQ cần cái này** để COO định tuyến đúng nhánh; mock bỏ qua. Enter = chạy luôn.
+- **Nút ▶ Run (Mock)**: bấm → app spawn `run.ps1 run <proj> "<request>" -Mock` qua server, stream log live qua SSE.
+- **Log panel**: mỗi event hiện 1 dòng/khối — `node_output` hiện **nội dung output đầy đủ** (không chỉ "N chars"); `run_end` hiện trạng thái (done/failed/awaiting). Auto-scroll theo event mới. Nút **Clear** dọn log + dừng stream.
+- **Highlight node live**: node `running` (viền xanh + pulse) → `done` (xanh lá + ✓) → `awaiting` (tím + ⏸ + pulse) trên graph React Flow theo thứ tự walk thực tế.
+- **Approval gate UI**: khi engine dừng ở `awaiting` → panel duyệt hiện `prompt` + danh sách `choices[]`; bấm 1 nhãn → `POST /api/decision` → engine resume tiếp, SSE chảy tiếp (cùng run dir). Hỗ trợ approve / reject / đổi nhãn đi nhánh khác. `diff_violation` (builder đụng file ngoài vùng trắng) hiện danh sách `violations[]` trong panel trước khi duyệt.
+- **Real-run guard (F-D2)**: checkbox "Real" cạnh nút Run; bật + bấm Run → **dialog cảnh báo đốt token**; Cancel = không spawn. Mặc định Mock (không đốt token).
+
+> **Giới hạn**: App chỉ chạy `run` (HQ + project con, mock mặc định). `autobuild`/`autofix` (E2E real, sandbox/promote) dùng CLI. Sửa graph trong app → Phase G (tuỳ chọn).
 
 ### Bất biến
 
-- **`workflow.json` KHÔNG bao giờ bị ghi toạ độ** — toạ độ chỉ nằm trong `<project>/.layout.json` (tách biệt, gitignored). Bất biến #2 đảm bảo `git diff workflow.json` luôn rỗng sau kéo thả.
-- Data-layer gọi engine `run.ps1 graph <proj> -Json` để chuẩn hoá graph (xử UTF-16, reuse loader pipeline-v1). App KHÔNG tự parse `workflow.json`.
+- **`workflow.json` KHÔNG bao giờ bị ghi toạ độ** — toạ độ chỉ nằm trong `<project>/.layout.json` (tách biệt, gitignored).
+- Data-layer gọi engine `run.ps1 graph <proj> -Json` (chuẩn hoá graph, xử UTF-16). App KHÔNG tự parse `workflow.json`.
+- **Engine BẤT BIẾN** — app chỉ gọi surface CLI sẵn (`run.ps1 run/resume/status`, Phase D). `git diff engine/` rỗng.
+- `server.mjs` dependency-free (Node `http`/`fs`/`child_process` thuần). Server bind `127.0.0.1`.
 
-### Giới hạn (Phase E — chỉ xem)
-
-App hiện chỉ **xem graph + layout**. Các tính năng sau thuộc Phase F/G:
-- **Xem log live + chạy run** từ app → Phase F.
-- **Duyệt plan / cấp quyền (approval gate)** từ app → Phase F.
-- **Sửa graph trong app** (thêm/xoá node, nối cạnh) → Phase G.
-
-### Files app
+### Files app (Phase E + F)
 
 | File | Vai trò |
 |---|---|
-| `app/server.mjs` | Server Node http: serve `dist/` + `GET /api/projects` + `GET /api/graph` + `GET/POST /api/layout` |
-| `app/src/App.jsx` | Root: header + project picker + `ReactFlowProvider` |
-| `app/src/GraphView.jsx` | Graph canvas: fetch graph+layout → dagre → React Flow + save-on-drag + reset layout |
-| `app/src/nodes.jsx` | 4 custom node types: WorkerNode / RouterNode / ApprovalNode / TerminalNode |
+| `app/server.mjs` | Server Node http: serve `dist/` + `GET /api/projects` + `GET /api/graph` + `GET/POST /api/layout` (E) + `POST /api/run` + `GET /api/events` SSE + `POST /api/decision` (F) |
+| `app/src/App.jsx` | Root: header + project picker + nút Run (Mock/Real) + run state + SSE client + `handleDecision` |
+| `app/src/GraphView.jsx` | Graph canvas: fetch graph+layout → dagre → React Flow + `nodeStatuses` highlight + save-on-drag + reset |
+| `app/src/RunLog.jsx` | Log panel: render từng event live (node_output đầy đủ, trạng thái, auto-scroll, clear) |
+| `app/src/ApprovalPanel.jsx` | Gate duyệt: prompt + choices (nút mỗi nhãn) + violations (diff_violation) |
+| `app/src/RealConfirmDialog.jsx` | Dialog cảnh báo đốt token khi bật Real mode |
+| `app/src/nodes.jsx` | 4 custom node types + ring highlight (running/done/awaiting) + StatusBadge |
 | `app/src/layout.js` | `applyDagreLayout`: dagre TB layout + detect back-edges |
 
 ---
@@ -530,9 +540,9 @@ company/
 │   ├── status.ps1       # status + logs viewer; hiện awaiting gate + prompt + choices
 │   ├── edit.ps1         # TUI
 │   └── lib/{json,log,claude}.ps1
-├── app/                 # App web — Workflow viewer (Phase E): React+Vite+Tailwind+React Flow+dagre
-│   ├── server.mjs       # Node http: serve dist/ + /api/projects + /api/graph + /api/layout
-│   ├── src/             # React source: App.jsx · GraphView.jsx · nodes.jsx · layout.js
+├── app/                 # App web (Phase E+F): React+Vite+Tailwind+React Flow+dagre
+│   ├── server.mjs       # Node http: serve dist/ + API projects/graph/layout (E) + run/events SSE/decision (F)
+│   ├── src/             # React: App·GraphView·RunLog·ApprovalPanel·RealConfirmDialog·nodes·layout
 │   └── package.json     # npm — npm run dev / npm run build / node server.mjs
 ├── hq/                  # HQ graph: workflow.json (11 node) + agents/ + build-spec.md + skills.md
 ├── catalog/             # 17 vai chi nhánh hand-authored (menu cho CTO)
@@ -545,6 +555,6 @@ company/
 └── plan/                # hq-build/{ROADMAP.md + phase-*/} (đợt build, DONE) + hq-improve/ (đợt cải thiện)
 ```
 
-**Trạng thái build**: toàn bộ Phase R / 0 / 1 / 2 / 3 / 4 / 5 / M đã ✅ DONE (xem [`plan/hq-build/ROADMAP.md`](plan/hq-build/ROADMAP.md)). **Phase E (App — Workflow viewer) ✅ DONE** — app web React+Vite+Tailwind+React Flow đọc `workflow.json` qua engine → vẽ graph tương tác, zoom/pan/drag, persist layout (xem §App bên trên).
+**Trạng thái build**: toàn bộ Phase R / 0 / 1 / 2 / 3 / 4 / 5 / M đã ✅ DONE (xem [`plan/hq-build/ROADMAP.md`](plan/hq-build/ROADMAP.md)). **Phase E + F (App) ✅ DONE** — app web React+Vite+Tailwind+React Flow: xem graph tương tác + bấm Run (mock) → log live đầy đủ output + node sáng dần trên graph + duyệt gate HITL từ UI (approval panel + Real-confirm dialog). Xem §App bên trên.
 
 Bộ test offline (mock, không đốt token): `examples/hq-tests.ps1` (per-agent HQ), `examples/hq-graph-tests.ps1` (8 path HQ graph), `examples/e2e-harness-tests.ps1` (harness round-trip). Chạy gom tất cả qua **`./run.ps1 selftest`** (3 script + 7 `p-*/stamp.ps1` + mem-demo + approval-demo done-gate; **12 mục tổng**; exit = số mục fail).

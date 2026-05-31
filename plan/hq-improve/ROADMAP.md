@@ -122,8 +122,8 @@ A đi đầu (de-risk). B + C dựa A; D dựa C (engine sạch rồi mới thê
 | C — Fix bug + de-chắp-vá | `plan/hq-improve/phase-c/` | ✅ DONE (10/10 session, 2026-05-29 → 2026-05-30) — 22 finding Phase-đích-C đóng hết (accessor·cast-số·path-guard·validate-gap·stamp·memory·router·frontmatter·edit·A-08 stderr); CC-a+CC-c đóng; A-08 xác nhận bằng 2 REAL-RUN (`autobuild hq -Real` 6-call output sạch + `run hello -Real` stderr tách kênh đúng, 0 leak). Mock-path bất biến (selftest 11/11). ⚠️ Phát hiện builder non-det xoá sandbox giữa real-run → CC-b Phase D/F. ✅ user duyệt đóng phase 2026-05-30 |
 | D — Engine HITL + event stream (#3) | `plan/hq-improve/phase-d/` | ✅ DONE (7/7 session, user duyệt 2026-05-30) — `engine/events.ps1` + `events.ndjson` 7 loại event full-output · node `approval` (validate/viz hexagon ⏸) · executor pause→awaiting + `Resume-Workflow -Decision` · headless `-AutoApprove`+exit-3+`status` awaiting · `Test-DiffScope` CC-b (snapshot+whitelist `projects/`+`spec.json`+`.runs/`+`memory/`) · diff-violation→awaiting + `examples/approval-demo/` (selftest 11→12). Graph không-gate chạy y hệt (mock-path bất biến, selftest 12/12). ⚠️ real-run user-initiated phơi + vá false-positive diff-scope (engine tự quản `.runs/`/`memory/` thêm vào whitelist). Bàn giao E/F: xem §Bàn-giao-D→E/F |
 | E — App I: workflow viewer (#4) | `plan/hq-improve/phase-e/` | ✅ DONE (6/6 session, user duyệt 2026-05-31) — App web `company/app/` (React+Vite+Tailwind+React Flow+dagre). **REVISE D-1**: stack đổi sang React+Vite+Tailwind+React Flow+dagre (user chốt 2026-05-31; lý do: Phase F nặng + lib node-graph sẵn). E.1 scaffold · E.2 data-layer (`graph -Json` additive, selftest 12/12) · E.3 render 4-loại node+dagre+project picker · E.4 zoom/pan/drag (fix border two-layer) · E.5 persist `.layout.json` GET/POST (coordinate-free, `git diff workflow.json`=RỖNG) · E.6 polish (Reset layout) + docs. Engine diff = chỉ `run.ps1` (`-Json` additive). Bàn giao F: xem §Bàn-giao-E→F/G |
-| F — App II: live log + duyệt (#3) | `plan/hq-improve/phase-f/` | 🟡 soạn xong (3 sub-phase / 6 session, 2026-05-31) — F.1 `POST /api/run`+latest.json discovery · F.2 SSE `/api/events`+`/api/decision` · F.3 log panel full-output · F.4 highlight node live · F.5 approval UI+Real-confirm · F.6 polish+docs+gate. Chốt F-D1..F-D4 (poll latest.json / mock-default+Real-confirm / scope chỉ `run` / SSE dependency-free). **Engine BẤT BIẾN** (run/resume/status/events sẵn từ D — F chỉ gắn `server.mjs`+`app/src/`). Chờ user duyệt mở F.1 |
-| G — App III: in-app edit (tuỳ chọn) | `plan/hq-improve/phase-g/` | ⬜ |
+| F — App II: live log + duyệt (#3) | `plan/hq-improve/phase-f/` | ✅ DONE (6/6 session, user duyệt 2026-06-01) — F.1 `POST /api/run`+latest.json discovery · F.2 SSE `/api/events`+`/api/decision` (byte-offset tail, resume nối tiếp cùng run dir) · F.3 `RunLog` panel full-output · F.4 highlight node live (running/done/awaiting, ring+badge+pulse) · F.5 `ApprovalPanel` (choices+diff_violation)+`RealConfirmDialog` · F.6 polish (loading state)+docs+ROADMAP. **Engine BẤT BIẾN** (`git diff engine/` rỗng mọi session). Mock-path bất biến; regression 12/12; server dependency-free; bind 127.0.0.1. §Bàn-giao-F→G: xem bên dưới |
+| G — App III: in-app edit (tuỳ chọn) | `plan/hq-improve/phase-g/` | 🟡 soạn xong (3 sub-phase / 6 session, 2026-06-01) — user chốt LÀM (gap: CLI `edit.ps1` chỉ pipeline-v1, từ chối graph-format). G.1 engine `save-graph` additive (write→validate→commit-or-restore+strip toạ độ+fixture `edit-demo`) · G.2 server `POST /api/workflow` (reject-on-invalid) · G.3 edit cạnh+when-label+Save · G.4 add/del node+form field+entry/max_steps · G.5 coordinate-free+layout node mới · G.6 polish+docs+đóng đợt. Chốt G-D1 full structural · G-D2 engine command additive · G-D3 reject-on-invalid. Engine chỉ thêm `save-graph`; `edit.ps1` bất biến; coordinate-free; server dependency-free |
 
 ---
 
@@ -207,6 +207,22 @@ A đi đầu (de-risk). B + C dựa A; D dựa C (engine sạch rồi mới thê
 - F thêm: `POST /api/run` (spawn `run.ps1 run/autobuild`) · `GET /api/events?project=&run=` (SSE tail `events.ndjson`) · `POST /api/decision` (gọi `run.ps1 resume -Decision`)
 
 **REVISE D-1 (log)**: Cross-cutting D-1 cũ = "web tĩnh, KHÔNG bundler/build step" → đổi sang **React + Vite + Tailwind** (user chốt 2026-05-31). Lý do: Phase F (live log SSE + highlight node chạy + form duyệt plan/diff) là app tương tác nặng — React component-model + state tiết kiệm lớn; React Flow là lib chuyên dụng. Đánh đổi đã chấp nhận: thêm Node toolchain + build step + `node_modules`; vẫn full-local. Ghi tại đây để các phase sau biết D-1 đã revise.
+
+---
+
+## Bàn giao F→G (chốt cuối F.6 — 2026-06-01)
+
+> Phase F *đóng trọn #3* (live log + run control + duyệt) + CC-b (UI duyệt diff_violation). **In-app edit** thuộc G (tuỳ chọn).
+
+| Cross-cut | F đã làm (✅) | Phase sau phải làm tiếp |
+| --- | --- | --- |
+| **#3 live log** | ✅ SSE tail `events.ndjson` (byte-offset, dependency-free) + `RunLog` panel full-output + highlight node live (running/done/awaiting) trên React Flow | (đóng ở F) |
+| **#3 run control + duyệt** | ✅ `POST /api/run` (mock-default, Real-confirm dialog) + `POST /api/decision` → `resume -Decision` + `ApprovalPanel` (choices, reject/đổi nhãn, diff_violation) | (đóng ở F) |
+| **CC-b UI duyệt diff** | ✅ `diff_violation` event → `violations[]` hiện trong `ApprovalPanel` trước khi duyệt | (đóng ở F) |
+| **G in-app edit** | Graph render (E) + drag layout + live highlight (F) — vẫn read-only semantic | **Sửa graph trong app** (thêm/xoá node, nối cạnh, sửa label) → ghi `workflow.json` hợp lệ (`validate` pass), coordinate-free → **Phase G** (tuỳ chọn) |
+| **autobuild/autofix từ app** | Scope chỉ `run` (F-D3) | (tuỳ chọn) thêm nút chạy `autobuild`/`autofix` real từ app (sandbox/promote/diff-scope) — sau G |
+
+**Server endpoint sau F** (đầy đủ): `GET /api/health` · `GET /api/projects` · `GET /api/graph?project=` · `GET/POST /api/layout?project=` (E) + `POST /api/run` · `GET /api/events?project=&run=` (SSE) · `POST /api/decision` (F). G (nếu làm) thêm: `POST /api/workflow?project=` (ghi `workflow.json` đã validate).
 
 ---
 
