@@ -8,6 +8,7 @@ import {
   useEdgesState,
   MarkerType,
   useReactFlow,
+  Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -105,6 +106,7 @@ export default function GraphView({ project }) {
 
   // Refs for debounced layout save (always current values, no stale-closure risk)
   const nodesRef = useRef([]);
+  const dagreRef = useRef([]); // dagre auto-layout positions for reset
   const saveTimerRef = useRef(null);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
@@ -139,6 +141,7 @@ export default function GraphView({ project }) {
           ? laid.map(n => saved[n.id] ? { ...n, position: saved[n.id] } : n)
           : laid;
 
+        dagreRef.current = laid; // save for Reset layout
         const styledEdges = styleBackEdges(rfEdges, backEdgeIds);
         setNodes(finalNodes);
         setEdges(styledEdges);
@@ -160,6 +163,19 @@ export default function GraphView({ project }) {
 
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [project]);
+
+  // Reset to dagre auto-layout: restore saved dagre positions + clear server layout file
+  const resetLayout = useCallback(() => {
+    if (!dagreRef.current.length || !project) return;
+    const posMap = {};
+    dagreRef.current.forEach(n => { posMap[n.id] = n.position; });
+    setNodes(prev => prev.map(n => posMap[n.id] ? { ...n, position: posMap[n.id] } : n));
+    fetch(`/api/layout?project=${encodeURIComponent(project)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ positions: {} }),
+    }).catch(() => {});
+  }, [project, setNodes]);
 
   // Debounced save: collect all node positions → POST /api/layout
   const onNodeDragStop = useCallback(() => {
@@ -228,6 +244,20 @@ export default function GraphView({ project }) {
         <FitOnLoad ready={ready} />
         <Background color="#e2e8f0" gap={20} />
         <Controls />
+        <Panel position="top-right">
+          <button
+            onClick={resetLayout}
+            title="Reset to auto-layout (dagre)"
+            style={{
+              padding: '4px 10px', fontSize: 11, fontFamily: 'monospace',
+              background: 'rgba(255,255,255,0.9)', border: '1px solid #cbd5e1',
+              borderRadius: 6, color: '#475569', cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(0,0,0,.08)', backdropFilter: 'blur(4px)',
+            }}
+          >
+            Reset layout
+          </button>
+        </Panel>
         <MiniMap
           nodeColor={n => {
             switch (n.data?.ntype) {

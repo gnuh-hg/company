@@ -121,7 +121,7 @@ A đi đầu (de-risk). B + C dựa A; D dựa C (engine sạch rồi mới thê
 | B — CLI & docs ergonomics (#1) | `plan/hq-improve/phase-b/` | ✅ DONE (4/4 session, 2026-05-29) — 13 lệnh tên mới (graph/autobuild/autofix/selftest) + alias im lặng + Show-Help nhóm + A-10 + A-01-hint (`run.ps1`); `engine/test-runner.ps1` (`selftest` gom 11 mục); README 3 luồng + doc A-01/05/15/24+sandbox; user duyệt. Engine executor bất biến |
 | C — Fix bug + de-chắp-vá | `plan/hq-improve/phase-c/` | ✅ DONE (10/10 session, 2026-05-29 → 2026-05-30) — 22 finding Phase-đích-C đóng hết (accessor·cast-số·path-guard·validate-gap·stamp·memory·router·frontmatter·edit·A-08 stderr); CC-a+CC-c đóng; A-08 xác nhận bằng 2 REAL-RUN (`autobuild hq -Real` 6-call output sạch + `run hello -Real` stderr tách kênh đúng, 0 leak). Mock-path bất biến (selftest 11/11). ⚠️ Phát hiện builder non-det xoá sandbox giữa real-run → CC-b Phase D/F. ✅ user duyệt đóng phase 2026-05-30 |
 | D — Engine HITL + event stream (#3) | `plan/hq-improve/phase-d/` | ✅ DONE (7/7 session, user duyệt 2026-05-30) — `engine/events.ps1` + `events.ndjson` 7 loại event full-output · node `approval` (validate/viz hexagon ⏸) · executor pause→awaiting + `Resume-Workflow -Decision` · headless `-AutoApprove`+exit-3+`status` awaiting · `Test-DiffScope` CC-b (snapshot+whitelist `projects/`+`spec.json`+`.runs/`+`memory/`) · diff-violation→awaiting + `examples/approval-demo/` (selftest 11→12). Graph không-gate chạy y hệt (mock-path bất biến, selftest 12/12). ⚠️ real-run user-initiated phơi + vá false-positive diff-scope (engine tự quản `.runs/`/`memory/` thêm vào whitelist). Bàn giao E/F: xem §Bàn-giao-D→E/F |
-| E — App I: workflow viewer (#4) | `plan/hq-improve/phase-e/` | 🟡 soạn xong (2026-05-31), chưa thực thi — 3 sub-phase / 6 session. **REVISE D-1**: stack đổi sang React+Vite+Tailwind+React Flow+dagre (user chốt 2026-05-31; lý do: Phase F nặng + lib node-graph sẵn). Persist `.layout.json`+server-POST (coordinate-free). E.1 scaffold · E.2 data-layer (`graph -Json` additive) · E.3 render+dagre · E.4 zoom/pan/drag · E.5 persist · E.6 docs+gate |
+| E — App I: workflow viewer (#4) | `plan/hq-improve/phase-e/` | ✅ DONE (6/6 session, user duyệt 2026-05-31) — App web `company/app/` (React+Vite+Tailwind+React Flow+dagre). **REVISE D-1**: stack đổi sang React+Vite+Tailwind+React Flow+dagre (user chốt 2026-05-31; lý do: Phase F nặng + lib node-graph sẵn). E.1 scaffold · E.2 data-layer (`graph -Json` additive, selftest 12/12) · E.3 render 4-loại node+dagre+project picker · E.4 zoom/pan/drag (fix border two-layer) · E.5 persist `.layout.json` GET/POST (coordinate-free, `git diff workflow.json`=RỖNG) · E.6 polish (Reset layout) + docs. Engine diff = chỉ `run.ps1` (`-Json` additive). Bàn giao F: xem §Bàn-giao-E→F/G |
 | F — App II: live log + duyệt (#3) | `plan/hq-improve/phase-f/` | ⬜ |
 | G — App III: in-app edit (tuỳ chọn) | `plan/hq-improve/phase-g/` | ⬜ |
 
@@ -188,6 +188,25 @@ A đi đầu (de-risk). B + C dựa A; D dựa C (engine sạch rồi mới thê
 - Bơm quyết định: `run.ps1 resume <proj> -Decision <label>` → tiếp tục từ awaiting
 - Đọc trạng thái: `run.ps1 status <proj>` → in state + awaiting info nếu có
 - Đọc events: `<proj>/.runs/<id>/events.ndjson` (NDJSON, stream đuôi được)
+
+---
+
+## Bàn giao E→F/G (chốt cuối E.6 — 2026-05-31)
+
+> Phase E cung cấp **app shell + viewer + server data-layer**; phần streaming/run-control/duyệt thuộc F, in-app edit thuộc G.
+
+| Cross-cut | E đã làm (✅) | Phase sau phải làm tiếp |
+| --- | --- | --- |
+| **#3 live log** | App shell + `GraphView` (highlight-able bằng cách update node style) + server data-layer sẵn. `events.ndjson` engine phát (Phase D) | **Server stream SSE** đọc `events.ndjson` (tail) + app hiển live output per node + **highlight node đang chạy** trên React Flow graph → **Phase F** |
+| **#3 run control + duyệt** | Server có GET/POST (data) — KHÔNG có run/decision. Engine `run.ps1 resume -Decision` sẵn (Phase D) | **Nút chạy run** (`run`/`autobuild`) + **UI duyệt plan/diff/cấp-quyền** (approval gate `awaiting`) + POST decision → engine resume → **Phase F** |
+| **#4 viewer** (NHẬN từ D) | ✅ App vẽ graph 4-loại node + nhãn when + back-edge + **approval hexagon ⏸** (bàn giao #4 viewer đóng) + zoom/pan/drag + persist layout coordinate-free | (đóng ở E) |
+| **G in-app edit** | Graph render + drag layout (read-only semantic graph) | **Sửa graph trong app** (thêm/xoá node, nối cạnh) → ghi `workflow.json` hợp lệ (`validate` pass), vẫn coordinate-free → **Phase G** (tuỳ chọn) |
+
+**Server endpoint Phase F gắn thêm** (E đã có nền `server.mjs`):
+- E đã có: `GET /api/health` · `GET /api/projects` · `GET /api/graph?project=` · `GET/POST /api/layout?project=`
+- F thêm: `POST /api/run` (spawn `run.ps1 run/autobuild`) · `GET /api/events?project=&run=` (SSE tail `events.ndjson`) · `POST /api/decision` (gọi `run.ps1 resume -Decision`)
+
+**REVISE D-1 (log)**: Cross-cutting D-1 cũ = "web tĩnh, KHÔNG bundler/build step" → đổi sang **React + Vite + Tailwind** (user chốt 2026-05-31). Lý do: Phase F (live log SSE + highlight node chạy + form duyệt plan/diff) là app tương tác nặng — React component-model + state tiết kiệm lớn; React Flow là lib chuyên dụng. Đánh đổi đã chấp nhận: thêm Node toolchain + build step + `node_modules`; vẫn full-local. Ghi tại đây để các phase sau biết D-1 đã revise.
 
 ---
 

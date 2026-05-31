@@ -23,24 +23,24 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 4 | 67% |
+| Sessions hoàn thành | 6 | 6 | 100% |
 | Scaffold app (Vite+React+Tailwind+ReactFlow+dagre) | 1 | 1 | 100% |
 | Data-layer (engine `-Json` + API projects/graph) | 1 | 1 | 100% |
 | Render graph (4 node + cạnh + nhãn + back-edge + dagre) | 1 | 1 | 100% |
 | Tương tác (zoom/pan/drag) | 1 | 1 | 100% |
 | Persist layout (`.layout.json` GET/POST, coordinate-free) | 1 | 1 | 100% |
-| Docs (README app · CLAUDE.md · ROADMAP E✅+D-1 revise+bàn-giao) | 1 | 0 | 0% |
-| User gate (đóng phase) | 1 | 0 | — |
+| Docs (README app · CLAUDE.md · ROADMAP E✅+D-1 revise+bàn-giao) | 1 | 1 | 100% |
+| User gate (đóng phase) | 1 | 1 | ✅ |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: E — App I: workflow viewer (#4). **E.1 + E.2 + E.3 + E.4 + E.5 DONE**. Làm trực tiếp trên `main`.
-- **Session kế tiếp**: **E.6** — Polish + docs + handoff + USER GATE. Scope: hiển thị metadata graph (entry/max_steps/#node/#edge đã có từ E.3); README mục "App — Workflow viewer"; cập nhật CLAUDE.md bảng file; ROADMAP E✅ + Revision D-1 + §Bàn-giao-E→F/G; user duyệt đóng phase.
-- **Blocker**: — (E.5 STOP gate PASS đầy đủ; build 486 modules; engine diff RỖNG; workflow.json bất biến).
-- **Reference**: `PLAN.md` Phase E → Session E.6.
-- **⚠️ Carry hạ tầng**: pwsh `/snap/bin/pwsh` core-dump teardown (đọc output, không tin exit code) · `workflow.json` = UTF-16 (dùng engine `-Json`, không JS-parse).
+- **Phase**: E — App I: workflow viewer (#4). **TẤT CẢ 6 SESSION DONE**. Làm trực tiếp trên `main`.
+- **Session kế tiếp**: Không còn — **Phase E ✅ ĐÓNG (user duyệt 2026-05-31)**. Phase tiếp theo = **F** (live log + run control + duyệt).
+- **Blocker**: —
+- **Reference**: `PLAN.md` Phase E → Done-gate §E.6.
+- **⚠️ Carry hạ tầng (→ F)**: server `app/server.mjs` sẵn sàng cho Phase F gắn thêm SSE + run-control. Engine `run.ps1 resume -Decision` (Phase D) sẵn.
 
 ---
 
@@ -75,6 +75,17 @@
 - **Next**: Session E.4 — tương tác zoom/pan/drag mượt (React Flow built-in đã gắn trong GraphView, cần verify behavior).
 - **Notes**: Engine trả `type: 'work'` (không phải `'worker'`), nhưng `toReactFlow` phân loại bằng topology (has outgoing edges?) nên không bị ảnh hưởng. `FitOnLoad` helper dùng `useReactFlow` hook + setTimeout 80ms để React Flow đo node dimensions trước khi fitView. Dagre multigraph mode cần edge ID unique (dùng `e.id`).
 
+### 2026-05-31 — Session E.6 — Polish + docs + handoff (⏳ USER GATE)
+- **Done**: (1) **Polish**: Thêm `Reset layout` button (`Panel position="top-right"`, style nhỏ gọn) — `dagreRef` lưu dagre positions sau mỗi load; click → restore dagre positions + POST `{positions:{}}` để clear server layout file (reload sẽ dùng dagre auto). Metadata strip + loading/error/empty states + legend (từ E.3) đã đầy đủ. (2) **README**: section mới "App — Workflow viewer (Phase E)" (cách chạy `npm run dev` / `npm run build && node server.mjs`, tính năng, bất biến, giới hạn, bảng files); Luồng 3 ghi chú `(c)` cập nhật; cây thư mục thêm `app/`; "Trạng thái build" nêu E ✅. (3) **CLAUDE.md**: hàng mới `company/app/` (mô tả app+server+data-layer+port+gitignore+bàn-giao-F); `engine/run.ps1` thêm Phase E `-Json` additive; `plan/hq-improve/phase-e/` → ✅ DONE. (4) **ROADMAP**: Phase E row → ✅ DONE (2026-05-31, 6/6 session); §Bàn-giao-E→F/G mới (bảng cross-cut + server endpoint F + REVISE D-1 log).
+- **Output**: `app/src/GraphView.jsx` (+Reset layout) + `README.md` (§App) + `CLAUDE.md` (3 row cập nhật) + `plan/hq-improve/ROADMAP.md` (§Bàn-giao-E→F/G).
+- **Gate** (STOP gate E.6 — đo được cho user confirm):
+  - `npm run build` → `dist/index.html` tồn tại; 486 modules / 428KB ✅
+  - `git diff engine/` = RỖNG ✅ (E.6 app+docs only)
+  - Reset layout: `dagreRef` lưu → button POST `{positions:{}}` → reload dùng dagre auto
+  - ⏳ **Cần user confirm thủ công**: `cd app && npm run dev` → mở `localhost:5173` → chọn `hq` → thấy 11 node/17 cạnh; zoom/pan/drag mượt; kéo node → reload giữ; nhấn "Reset layout" → về dagre; chọn `approval-demo` → hexagon ⏸. `git diff hq/workflow.json` = RỖNG.
+- **Next**: ⏳ USER GATE → user duyệt → Phase E ✅ ĐÓNG → Phase F (live log + run control).
+- **Notes**: `Panel` component từ `@xyflow/react` dùng để render button trong React Flow canvas coordinate space (tránh z-index conflict với Controls/MiniMap). Engine không đụng — regression engine không cần chạy (E.6 app+docs only theo PLAN).
+
 ### 2026-05-31 — Session E.4 — Tương tác: zoom/pan/drag
 - **Done**: (1) **`app/src/nodes.jsx`** — Fix border rendering trên `RouterNode` và `ApprovalNode`: `border` CSS bị clip khi dùng `clip-path`, dùng two-layer technique thay thế (outer div = border color, inner div `inset:2` = fill color — cho polygon outline đúng hình). (2) **`app/src/GraphView.jsx`** — Bỏ `fitView` prop khỏi `<ReactFlow>` component (redundant với `FitOnLoad` helper đã có từ E.3; `FitOnLoad` trigger sau 80ms khi node đã đo xong nên timing chính xác hơn). Thêm explicit `panOnDrag`, `zoomOnScroll`, `nodesDraggable` props cho rõ ràng.
 - **Output**: `app/src/nodes.jsx` (border fix) + `app/src/GraphView.jsx` (fitView + props).
@@ -93,3 +104,4 @@
 | 2026-05-31 | E.3 DONE — React Flow render 4-loại node + dagre + project picker; engine diff = EMPTY | @claude |
 | 2026-05-31 | E.4 DONE — tương tác zoom/pan/drag; fix border rendering RouterNode+ApprovalNode (two-layer clip-path); bỏ fitView prop (FitOnLoad handles); build pass; engine diff = EMPTY | @claude |
 | 2026-05-31 | E.5 DONE — persist layout `.layout.json` GET/POST: server `resolveProjectDir`+path-guard+writeFile; app load layout song song với graph (saved positions override dagre), `onNodeDragStop` debounce 600ms → POST; build pass (486 modules); STOP gate 6/6 PASS; workflow.json RỖNG; engine diff RỖNG | @claude |
+| 2026-05-31 | E.6 DONE — Polish (Reset layout button: `dagreRef` lưu dagre positions, `Panel top-right` button reset+POST `{positions:{}}` clear server layout); README §"App — Workflow viewer" mới + Luồng 3 update + cây thư mục thêm `app/`; CLAUDE.md: hàng `company/app/` mới + `run.ps1` mention `-Json` + `phase-e` ✅ DONE; ROADMAP: Phase E ✅ + §Bàn-giao-E→F/G + REVISE D-1 log. Build pass (486 modules 428KB). ENGINE KHÔNG ĐỤN → engine diff = EMPTY. ⏳ Chờ user duyệt USER GATE | @claude |
