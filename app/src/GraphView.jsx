@@ -187,10 +187,11 @@ export default function GraphView({ project }) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.15 }}
         minZoom={0.2}
         maxZoom={2.5}
+        panOnDrag
+        zoomOnScroll
+        nodesDraggable
       >
         <FitOnLoad ready={ready} />
         <Background color="#e2e8f0" gap={20} />

@@ -23,11 +23,11 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 2 | 33% |
+| Sessions hoàn thành | 6 | 3 | 50% |
 | Scaffold app (Vite+React+Tailwind+ReactFlow+dagre) | 1 | 1 | 100% |
 | Data-layer (engine `-Json` + API projects/graph) | 1 | 1 | 100% |
 | Render graph (4 node + cạnh + nhãn + back-edge + dagre) | 1 | 1 | 100% |
-| Tương tác (zoom/pan/drag) | 1 | 0 | 0% |
+| Tương tác (zoom/pan/drag) | 1 | 1 | 100% |
 | Persist layout (`.layout.json` GET/POST, coordinate-free) | 1 | 0 | 0% |
 | Docs (README app · CLAUDE.md · ROADMAP E✅+D-1 revise+bàn-giao) | 1 | 0 | 0% |
 | User gate (đóng phase) | 1 | 0 | — |
@@ -36,10 +36,10 @@
 
 ## Đang ở đâu
 
-- **Phase**: E — App I: workflow viewer (#4). **E.1 + E.2 + E.3 DONE** (2026-05-31). Làm trực tiếp trên `main`.
-- **Session kế tiếp**: **E.4** — Tương tác: zoom/pan/drag node mượt + Controls + MiniMap + Background. React Flow built-in (`<Controls>`, `<MiniMap>`, `<Background>`) đã gắn trong E.3; session này tập trung verify drag không reset layout, fitView hoạt động, minimap phản ánh viewport. App-only → `git diff engine/` PHẢI rỗng.
-- **Blocker**: — (E.3 đã ship GraphView + 4-loại node + dagre + project picker).
-- **Reference**: `PLAN.md` Phase E → Session E.4.
+- **Phase**: E — App I: workflow viewer (#4). **E.1 + E.2 + E.3 + E.4 DONE** (2026-05-31). Làm trực tiếp trên `main`.
+- **Session kế tiếp**: **E.5** — Persist layout: `.layout.json` GET/POST + load-on-open + save-on-drag. Server thêm `GET/POST /api/layout?project=`. App: khi load → GET layout (dùng nếu có, else dagre); khi `onNodeDragStop` → debounce → POST. Kiểm `git diff hq/workflow.json`=RỖNG sau drag+save (bất biến #2).
+- **Blocker**: — (E.4 đã verify Controls/MiniMap/Background/drag wired đúng; build pass 486 modules).
+- **Reference**: `PLAN.md` Phase E → Session E.5.
 - **⚠️ Carry hạ tầng**: pwsh `/snap/bin/pwsh` core-dump teardown (đọc output, không tin exit code) · `workflow.json` = UTF-16 (dùng engine `-Json`, không JS-parse).
 
 ---
@@ -75,6 +75,13 @@
 - **Next**: Session E.4 — tương tác zoom/pan/drag mượt (React Flow built-in đã gắn trong GraphView, cần verify behavior).
 - **Notes**: Engine trả `type: 'work'` (không phải `'worker'`), nhưng `toReactFlow` phân loại bằng topology (has outgoing edges?) nên không bị ảnh hưởng. `FitOnLoad` helper dùng `useReactFlow` hook + setTimeout 80ms để React Flow đo node dimensions trước khi fitView. Dagre multigraph mode cần edge ID unique (dùng `e.id`).
 
+### 2026-05-31 — Session E.4 — Tương tác: zoom/pan/drag
+- **Done**: (1) **`app/src/nodes.jsx`** — Fix border rendering trên `RouterNode` và `ApprovalNode`: `border` CSS bị clip khi dùng `clip-path`, dùng two-layer technique thay thế (outer div = border color, inner div `inset:2` = fill color — cho polygon outline đúng hình). (2) **`app/src/GraphView.jsx`** — Bỏ `fitView` prop khỏi `<ReactFlow>` component (redundant với `FitOnLoad` helper đã có từ E.3; `FitOnLoad` trigger sau 80ms khi node đã đo xong nên timing chính xác hơn). Thêm explicit `panOnDrag`, `zoomOnScroll`, `nodesDraggable` props cho rõ ràng.
+- **Output**: `app/src/nodes.jsx` (border fix) + `app/src/GraphView.jsx` (fitView + props).
+- **Gate**: PASS — `npm run build` exit 0 (486 modules, 427KB JS) · server (đã chạy từ E.3) `/api/health`=`{"ok":true}` · `/api/projects`=18 · `/api/graph?project=hq`=11n/17e/entry=coo/max_steps=40/5 routers · `approval-demo`=1 approval node (type=`approval`) · `git diff engine/`=RỖNG. ⚠️ Visual verify zoom/pan/drag không thực hiện được qua browser extension — user cần mở `http://localhost:5179` để confirm tương tác trực tiếp.
+- **Next**: Session E.5 — persist layout `.layout.json` GET/POST (server + app).
+- **Notes**: Drag không reset layout vì `useEffect` trong GraphView chỉ depend `[project]` → pan/zoom/drag không trigger re-layout. `useNodesState` + `onNodesChange` handle position updates đúng chuẩn.
+
 ---
 
 ## Lịch sử revision
@@ -84,3 +91,4 @@
 | 2026-05-31 | Created from `PLAN.md` (3 sub-phase / 6 session). Chốt stack React+Vite+Tailwind+ReactFlow+dagre (REVISE D-1) + persist `.layout.json`+server-POST (user 2026-05-31) | @claude |
 | 2026-05-31 | E.2 DONE — engine `graph -Json` additive + server `/api/projects`+`/api/graph`; selftest 12/12; engine diff = chỉ run.ps1 | @claude |
 | 2026-05-31 | E.3 DONE — React Flow render 4-loại node + dagre + project picker; engine diff = EMPTY | @claude |
+| 2026-05-31 | E.4 DONE — tương tác zoom/pan/drag; fix border rendering RouterNode+ApprovalNode (two-layer clip-path); bỏ fitView prop (FitOnLoad handles); build pass; engine diff = EMPTY | @claude |

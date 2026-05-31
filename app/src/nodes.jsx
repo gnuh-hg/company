@@ -22,16 +22,24 @@ export function WorkerNode({ data }) {
 
 // ── RouterNode ─────────────────────────────────────────────────────────────
 // Router node: diamond shape via clip-path. Handles sit at visual tips.
+// Two-layer technique: outer layer = border color, inner layer = fill color.
+// border on a clip-path element is clipped off, so this two-layer approach
+// gives a proper polygon outline.
 export function RouterNode({ data }) {
   return (
     <div style={{ width: 90, height: 90, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <Handle type="target" position={Position.Top} style={{ top: 0 }} />
-      {/* Diamond background */}
+      {/* Border layer */}
       <div style={{
         position: 'absolute', inset: 0,
         clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
+        background: '#ca8a04',
+      }} />
+      {/* Fill layer (inset 2px reveals border color around edges) */}
+      <div style={{
+        position: 'absolute', inset: 2,
+        clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
         background: '#fef9c3',
-        border: '1px solid #ca8a04',
       }} />
       <span style={{
         position: 'relative', zIndex: 1,
@@ -52,12 +60,17 @@ export function ApprovalNode({ data }) {
   return (
     <div style={{ width: 108, height: 90, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <Handle type="target" position={Position.Top} style={{ top: 0 }} />
-      {/* Hexagon background */}
+      {/* Border layer */}
       <div style={{
         position: 'absolute', inset: 0,
         clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)',
+        background: '#9333ea',
+      }} />
+      {/* Fill layer */}
+      <div style={{
+        position: 'absolute', inset: 2,
+        clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)',
         background: '#f3e8ff',
-        border: '1px solid #9333ea',
       }} />
       <span style={{
         position: 'relative', zIndex: 1,
