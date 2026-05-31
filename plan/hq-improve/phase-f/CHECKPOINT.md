@@ -19,24 +19,31 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 4 | 67% |
+| Sessions hoàn thành | 6 | 5 | 83% |
 | Sub-phase đóng | 3 (F-I/F-II/F-III) | 2 (F-I, F-II) | 67% |
 | Server endpoint F | 3 (`/api/run`, `/api/events` SSE, `/api/decision`) | 3 | 100% |
 | Done-gate F (HQ mock: live log + highlight → gate → approve → terminal; + reject/đổi nhánh) | pass | — | — |
-| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2·F.3·F.4 | — |
+| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2·F.3·F.4·F.5 | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: F — **Session F.4 DONE** (2026-06-01). Sub-phase F-II (app live log + graph highlight) ĐÓNG. F.4 highlight node live trên React Flow.
-- **Session kế tiếp**: **F.5** — approval gate UI (choices + diff_violation, reject/đổi nhãn) + Real-run confirm dialog.
-- **Blocker**: — (highlight data-path verified qua SSE: hello → node_start/node_done×2 + run_end; approval-demo → awaiting `node:"gate"`,`choices:["approve"]`; build OK 487 modules; engine diff RỖNG).
-- **Reference**: `PLAN.md` Phase F → Session F.5.
+- **Phase**: F — **Session F.5 DONE** (2026-06-01). Approval gate UI + Real-run confirm dialog (app-only — server đã đủ từ F.1/F.2).
+- **Session kế tiếp**: **F.6** — Polish + docs (README/CLAUDE.md/ROADMAP §Bàn-giao-F→G) + USER GATE đóng phase. F.6 chạy full done-gate trên app live (npm run dev): HQ/approval-demo mock → live log + highlight → gate → approve → terminal + reject/đổi nhánh; Real toggle → dialog chặn.
+- **Blocker**: — (F.5 verified server-level: approval-demo mock → awaiting `node:gate`,`choices:[approve]`,`prompt` → POST decision approve → resumed→builder→run_end done; build OK 489 modules; engine diff RỖNG; regression 12/12).
+- **Reference**: `PLAN.md` Phase F → Session F.6.
 
 ---
 
 ## Per-session log
+
+### 2026-06-01 — Session F.5 (approval gate UI + Real-run confirm dialog)
+- **Done**: HITL UI + Real guard, app-only (server `/api/run` nhận `mock:false`, `/api/decision` nhận label — đủ từ F.1/F.2, KHÔNG đụng server). (1) **`ApprovalPanel.jsx`** (mới) — render khi `awaiting`: prompt + `node` + 1 nút mỗi `choices[]` label (choice[0]=happy-path filled tím, còn lại outlined → đổi-nhãn/reject); `violations[]` (diff_violation) hiện trong khối cam trước khi duyệt (CC-b); `pending` disable nút + "resuming…". (2) **`RealConfirmDialog.jsx`** (mới) — modal overlay cảnh báo đốt token; Cancel→đóng (no spawn), "Run for real"→`handleRun(false)`. (3) **`App.jsx`** — state `realMode`/`showRealConfirm`/`decisionPending`; `handleRunClick` (Real→mở dialog · Mock→`handleRun(true)`); `handleRun(mock)` (param hoá body `{mock}`); `handleDecision(label)` POST `/api/decision {project,run:runId,decision}` → set running (panel ẩn, SSE đang mở chảy tiếp); derive `awaitingEvt`+`pendingViolations` từ events (useMemo, reset trên `resumed`); header thêm nút đổi nhãn Run (Mock/Real màu) + checkbox **Real** toggle; ApprovalPanel render trên RunLog khi `awaiting`; dialog render cuối.
+- **Output**: `app/src/ApprovalPanel.jsx` + `RealConfirmDialog.jsx` (mới) + `App.jsx` (update). Build OK (489 modules).
+- **Gate**: ✅ **approval-demo mock** server-driven full chain: `POST /api/run`→`awaiting` `{node:"gate",choices:["approve"],prompt:"Duyệt plan…"}` (shape khớp ApprovalPanel reads thẳng) → `POST /api/decision approve` `{ok:true}` → `resumed`(decision=approve)→`run_start`(resume:true)→builder→`run_end`(done,terminal=builder). ✅ Real dialog = pure client (handleRun(false) CHỈ gọi khi confirm; Cancel no-op) → KHÔNG đốt token session này. ✅ build compile sạch. ✅ regression: `validate hello`=0 · `run hello -Mock`=done · `selftest`=**12/12 PASS**. ✅ **`git diff engine/` RỖNG**.
+- **Next**: Session F.6 — Polish + docs + USER GATE (done-gate đầy đủ trên app live).
+- **Notes**: F.5 logic = client render derive từ events đã verified F.2 (server-level data-path identical). awaitingEvt reset trên `resumed` → panel tự ẩn sau approve. Verify dùng curl server-driven (PATH `pwsh`, port 5193) — KHÔNG mở SSE `curl -N` chung batch (stream giữ mở → cancel batch; bài học F.4). Server-spawn pwsh vẫn PATH `pwsh` (snap SIGABRT). F.6 nên verify bằng `npm run dev` thật (click UI) để đóng done-gate UX.
 
 ### 2026-06-01 — Session F.4 (highlight node live trên React Flow)
 - **Done**: Nối live event vào graph highlight (app-only, không đụng engine/GraphView semantic). (1) **`App.jsx`** — `nodeStatuses` (useMemo từ `events`, seq-ordered): map node id→status (`node_start`/`node_output`→running · `node_done`→done · `awaiting`→awaiting; last-event-wins xử loop re-visit). Truyền xuống `<GraphView nodeStatuses=…>`. Reset tự nhiên: `handleClear`/đổi project clear `events` → `nodeStatuses` rỗng → highlight tắt. (2) **`GraphView.jsx`** — prop `nodeStatuses={}` + `useEffect` sync `nodeStatuses`→`node.data.runStatus` qua `setNodes(map)` **giữ nguyên position/layout** (guard `changed` tránh re-render thừa). (3) **`nodes.jsx`** — `runRing(rs)` (box-shadow ring: running=xanh+pulse · done=xanh-lá · awaiting=tím+pulse) + `<StatusBadge>` (chấm góc ●/✓/⏸) áp cho cả 4 node type (worker/router/approval/terminal); router+approval thêm `borderRadius:4` cho ring quanh shape clip-path. (4) **`index.css`** — keyframe `rfPulse` (brightness pulse cho running/awaiting).
@@ -91,3 +98,4 @@
 | 2026-05-31 | Created from `PLAN.md` | @planner |
 | 2026-05-31 | F.2 DONE — `GET /api/events` SSE (byte-offset tail, dependency-free) + `POST /api/decision` (resume nối-tiếp cùng run dir). Verified hello full chain + approval-demo awaiting→approve→terminal. `awaiting` shape = top-level. Engine diff RỖNG. Hạ tầng: node-spawn dùng PATH `pwsh` (snap pwsh SIGABRT) | @claude |
 | 2026-06-01 | F.4 DONE — highlight node live trên React Flow (running/done/awaiting): `nodeStatuses` derive từ events (App) → sync `node.data.runStatus` giữ layout (GraphView) → ring+badge+pulse (nodes.jsx/index.css). Sub-phase F-II ĐÓNG. Verified hello running→done + approval-demo awaiting(gate). Engine diff RỖNG; regression xanh | @claude |
+| 2026-06-01 | F.5 DONE — approval gate UI (`ApprovalPanel.jsx`: prompt+choices+diff_violation, đổi-nhãn/reject) + Real-run confirm dialog (`RealConfirmDialog.jsx`) + App wire (realMode/decision/awaitingEvt derive). App-only (server đủ từ F.1/F.2). Verified approval-demo mock awaiting→approve→terminal (server-driven). Build 489 modules; engine diff RỖNG; regression 12/12 | @claude |
