@@ -19,24 +19,31 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 3 | 50% |
-| Sub-phase đóng | 3 (F-I/F-II/F-III) | 1 (F-I) | 33% |
+| Sessions hoàn thành | 6 | 4 | 67% |
+| Sub-phase đóng | 3 (F-I/F-II/F-III) | 2 (F-I, F-II) | 67% |
 | Server endpoint F | 3 (`/api/run`, `/api/events` SSE, `/api/decision`) | 3 | 100% |
 | Done-gate F (HQ mock: live log + highlight → gate → approve → terminal; + reject/đổi nhánh) | pass | — | — |
-| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2·F.3 | — |
+| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2·F.3·F.4 | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: F — **Session F.3 DONE** (2026-05-31). Sub-phase F-I (server backend) ĐÓNG. F.3 thêm nút Run + RunLog panel.
-- **Session kế tiếp**: **F.4** — highlight node đang chạy trên React Flow (running/done/awaiting) theo event live.
-- **Blocker**: — (SSE + RunLog full chain verified: hello run_start→node_output(nội dung thật)→run_end + event:end; bundle chứa EventSource/api/run/api/events/Run(Mock)/node_output).
-- **Reference**: `PLAN.md` Phase F → Session F.4.
+- **Phase**: F — **Session F.4 DONE** (2026-06-01). Sub-phase F-II (app live log + graph highlight) ĐÓNG. F.4 highlight node live trên React Flow.
+- **Session kế tiếp**: **F.5** — approval gate UI (choices + diff_violation, reject/đổi nhãn) + Real-run confirm dialog.
+- **Blocker**: — (highlight data-path verified qua SSE: hello → node_start/node_done×2 + run_end; approval-demo → awaiting `node:"gate"`,`choices:["approve"]`; build OK 487 modules; engine diff RỖNG).
+- **Reference**: `PLAN.md` Phase F → Session F.5.
 
 ---
 
 ## Per-session log
+
+### 2026-06-01 — Session F.4 (highlight node live trên React Flow)
+- **Done**: Nối live event vào graph highlight (app-only, không đụng engine/GraphView semantic). (1) **`App.jsx`** — `nodeStatuses` (useMemo từ `events`, seq-ordered): map node id→status (`node_start`/`node_output`→running · `node_done`→done · `awaiting`→awaiting; last-event-wins xử loop re-visit). Truyền xuống `<GraphView nodeStatuses=…>`. Reset tự nhiên: `handleClear`/đổi project clear `events` → `nodeStatuses` rỗng → highlight tắt. (2) **`GraphView.jsx`** — prop `nodeStatuses={}` + `useEffect` sync `nodeStatuses`→`node.data.runStatus` qua `setNodes(map)` **giữ nguyên position/layout** (guard `changed` tránh re-render thừa). (3) **`nodes.jsx`** — `runRing(rs)` (box-shadow ring: running=xanh+pulse · done=xanh-lá · awaiting=tím+pulse) + `<StatusBadge>` (chấm góc ●/✓/⏸) áp cho cả 4 node type (worker/router/approval/terminal); router+approval thêm `borderRadius:4` cho ring quanh shape clip-path. (4) **`index.css`** — keyframe `rfPulse` (brightness pulse cho running/awaiting).
+- **Output**: `app/src/App.jsx` + `GraphView.jsx` + `nodes.jsx` + `index.css` (update). Build OK (487 modules).
+- **Gate**: ✅ **hello mock** SSE → `node_start`×2/`node_output`×2/`node_done`×2/`run_end`(done) → nodeStatuses chạy running→done cả 2 node. ✅ **approval-demo mock** SSE → `awaiting` `node:"gate"`,`choices:["approve"]` → highlight ⏸ gate. ✅ build compile sạch. ✅ regression: `validate hello`=0 · `run hello -Mock`=done(0). ✅ **`git diff engine/` RỖNG**.
+- **Next**: Session F.5 — approval gate UI + Real-run confirm dialog.
+- **Notes**: Highlight là tầng render client thuần (derive từ events đã verified F.2/F.3) — verify qua build + chuỗi SSE đúng (nguồn nodeStatuses). Router project (hq/loopy) vẫn không ghi `latest.json` khi fail mock (engine BẤT BIẾN) → F.4/F.5 verify dùng hello (running/done) + approval-demo (awaiting). Server spawn pwsh: PATH `pwsh` (snap pwsh SIGABRT) — port 5191 dùng session này. ⚠️ Đừng gom `curl -N` SSE (stream awaiting giữ mở → timeout exit 143/144) chung batch song song với edit — sẽ bị cancel cả batch; tách riêng.
 
 ### 2026-05-31 — Session F.3 (EventSource client + RunLog panel)
 - **Done**: (1) **`RunLog.jsx`** (component mới) — renders mỗi loại event thành row: `run_start` (▶ Run started), `node_start` (→ node agent), `node_output` (nội dung thật full trong `<pre>` có scroll max 220px), `node_done` (✓), `awaiting` (⏸ nổi bật nền tím), `resumed` (▶ resumed + decision), `run_end` (■ status màu + terminal), `diff_violation` (⚠ + violations list), fallback raw JSON. Auto-scroll ref khi events.length đổi. Panel header: "Run Log" chip + status pill (màu theo idle/running/done/awaiting/failed) + nút Clear. (2) **`App.jsx`** — thêm run state (runId/events/runStatus/runErr) + `esRef` (EventSource ref cleanup on unmount). Nút **▶ Run (Mock)** trong header: POST /api/run → nhận {runId} → mở EventSource(`/api/events?project=&run=`) → parse events (dedup bằng seq) → update runStatus từ `run_end`/`awaiting`. `event: end` → đóng ES. Selector project thay đổi → clear run state. Layout: `main` split flexColumn (graph flex:1 minHeight:0 / log panel 280px cố định khi showLog). `handleClear` tắt ES + reset state.
@@ -83,3 +90,4 @@
 | --- | --- | --- |
 | 2026-05-31 | Created from `PLAN.md` | @planner |
 | 2026-05-31 | F.2 DONE — `GET /api/events` SSE (byte-offset tail, dependency-free) + `POST /api/decision` (resume nối-tiếp cùng run dir). Verified hello full chain + approval-demo awaiting→approve→terminal. `awaiting` shape = top-level. Engine diff RỖNG. Hạ tầng: node-spawn dùng PATH `pwsh` (snap pwsh SIGABRT) | @claude |
+| 2026-06-01 | F.4 DONE — highlight node live trên React Flow (running/done/awaiting): `nodeStatuses` derive từ events (App) → sync `node.data.runStatus` giữ layout (GraphView) → ring+badge+pulse (nodes.jsx/index.css). Sub-phase F-II ĐÓNG. Verified hello running→done + approval-demo awaiting(gate). Engine diff RỖNG; regression xanh | @claude |
