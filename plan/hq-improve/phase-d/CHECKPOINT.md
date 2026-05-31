@@ -21,27 +21,39 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 7 | 5 | 71% |
+| Sessions hoàn thành | 7 | 7 | 100% ✅ |
 | Khả năng HITL (approval node · awaiting · resume-decision) | 3 | 3 | 100% |
 | Event stream (events.ndjson full output) | 1 | 1 | 100% |
-| CC-b engine-part (Test-DiffScope + violation→awaiting) | 1 | ½ | 50% |
-| Demo + selftest mục mới (approval-demo) | 1 | 0 | 0% |
-| User gate (đóng phase; D.7 token nếu chạy) | 1–2 | 0 | — |
+| CC-b engine-part (Test-DiffScope + violation→awaiting) | 1 | 1 | 100% |
+| Demo + selftest mục mới (approval-demo) | 1 | 1 | 100% |
+| Docs (README HITL · CLAUDE.md · ROADMAP §Bàn-giao-D→E/F) | 1 | 1 | 100% |
+| User gate (đóng phase) | 1 | 1 | 100% ✅ (user duyệt 2026-05-30) |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: D — engine human-in-the-loop + event stream (#3). **D.1 ✅ DONE · D.2 ✅ DONE · D.3 ✅ DONE · D.4 ✅ DONE · D.5 ✅ DONE.**
-- **Session kế tiếp**: **D.6 — diff-violation → awaiting gate + demo fixture** (`engine/e2e.ps1`/`workflow.ps1` wire + `examples/approval-demo/` + `engine/test-runner.ps1`). Wire `Test-DiffScope` vào build-path `Invoke-E2E` (sau builder, trước promote): vi phạm → pause `awaiting` + event `diff_violation` thay vì promote mù. Fixture `examples/approval-demo/` (mock, offline): graph có node `approval` giữa plan→build → done-gate pause→resume. `test-runner.ps1` thêm 1 mục selftest approval-demo (11→12 mục).
+- **Phase**: D — engine human-in-the-loop + event stream (#3). **✅ ĐÓNG PHASE (user duyệt 2026-05-30).** D.1–D.7 đều DONE + vá bug diff-scope false-positive (real-run user-initiated phơi ra).
+- **Trạng thái**: **DONE.** Bước kế trong roadmap: Phase E (App I — workflow viewer #4) hoặc Phase F (cần cả D+E). Phase E chỉ phụ thuộc B (surface ổn định) → có thể bắt đầu bất cứ lúc nào.
 - **Blocker**: — (không).
-- **Reference**: `PLAN.md` §Session D.6.
 - **⚠️ Hạ tầng pwsh (carry từ Phase C)**: `/snap/bin/pwsh` (7.6.2) CÓ sẵn nhưng hay core-dump RC=134 lúc teardown. **Cách chạy được**: `pwsh -NoProfile -Command '<inline>' 2>&1 | cat` + **`dangerouslyDisableSandbox: true`** → đọc NỘI DUNG output, KHÔNG tin exit code. Tránh `-File` mode (crash trước khi in) + stdin-pipe (bracketed-paste rác). Để drive TUI/`Read-Host`: file redirect `pwsh "..." < input.txt`.
 - **⚠️ Encoding**: file `engine/*.ps1` là **UTF-16** (Windows-authored) → `grep`/`awk`/`cat`/`head` của Linux trả RỖNG/nhiễu. Dùng `pwsh` để đọc/sửa, hoặc `iconv -f UTF-16 -t UTF-8` khi cần soi bằng tool text. (Phát hiện 2026-05-30 lúc soạn plan.)
 
 ---
 
 ## Per-session log
+
+### 2026-05-30 — Session D.7
+- **Done**: Docs + ROADMAP handoff. 3 file sửa:
+  - `README.md`: mục mới "Human-in-the-loop (HITL)" — node `approval` (khai báo + ví dụ JSON), vòng đời run-dừng-resume (lệnh step-by-step), `events.ndjson` schema 7 loại + full output, diff-scope guard (vi phạm → awaiting). Bảng lệnh: `run` thêm `-AutoApprove`, `resume` thêm `-Decision`. Directory listing: `events.ps1` + approval annotation. Selftest mô tả 12 mục.
+  - `CLAUDE.md`: thêm dòng `engine/events.ps1`; cập nhật `workflow.ps1`/`validate.ps1`/`viz.ps1`/`e2e.ps1`/`test-runner.ps1`; thêm `examples/approval-demo/`; Phase D status → ✅ DONE.
+  - `plan/hq-improve/ROADMAP.md`: Phase D → ✅ DONE + thêm §"Bàn giao D→E/F" (bảng 4 cross-cut + event schema + surface engine Phase F cần gọi).
+- **Gate**: **PASS**. Regression: validate hello=0 · run hello -Mock=done · selftest 12/12 PASS. Docs cập nhật đầy đủ.
+- **🔴 BUG-FIX (real-run user-initiated `autobuild hq -Real -KeepSandbox` 19:33)**: real-run phơi ra **false-positive diff-scope**. `Test-DiffScope` default whitelist chỉ có `projects/`+`spec.json`, nhưng `Invoke-E2E` (e2e.ps1:248/264) chụp snapshot **bọc CẢ workflow** → mọi artifact engine tự sinh (`.runs/<id>/*`, `events.ndjson`, `state.json`, output_key txt, `memory/context.md`) bị flag "added/modified" → `diff_violation` sai → KHÔNG promote dù run done→record OK.
+  - **Fix**: thêm `.runs/` + `memory/` vào default whitelist `Test-DiffScope` (e2e.ps1:464-471) — vùng engine TỰ QUẢN, không phải builder scope. Unit test KHÔNG phải sửa (case 1-3 truyền `$allowed` tường minh → vẫn test logic chung). Thêm **case 4+5** (e2e-harness-tests.ps1): default whitelist cho phép `.runs/+memory/+projects/` (ok=True) nhưng vẫn bắt `hq/agents/` (ok=False). C.10 (builder xoá `.runs/` giữa run) vẫn bắt được — vì xoá giữa run → tester/record fail → run fail → return sớm e2e.ps1:256 TRƯỚC diff-check.
+  - Docs cập nhật: README §diff-scope (whitelist 4 vùng + lý do snapshot-bọc-cả-workflow) + CLAUDE.md dòng `e2e.ps1`.
+  - **Test [5] 11/11 xanh** (3 cũ + 4 mới); regression 12/12 sau fix. ⚠️ KHÔNG re-run real (đốt token) — logic fix chứng minh qua mock case 4. User để lại `sandbox/20260530-193351` (-KeepSandbox) nếu muốn soi.
+- **Next**: User gate — duyệt đóng Phase D → Phase E (App I: workflow viewer #4). Nếu muốn xác nhận fix bằng real-run nữa: `autobuild hq "..." -Real` (đốt token, user-gate).
 
 ### 2026-05-30 — Session D.5
 - **Done**: `Get-SandboxSnapshot` + `Test-DiffScope` thuần testable thêm vào `engine/e2e.ps1`; test [5] thêm vào `examples/e2e-harness-tests.ps1`:
@@ -100,3 +112,7 @@
 | 2026-05-30 | Session D.2 DONE — node type `approval` (graph carry prompt + validate exempt-fields/edge-rule + viz hexagon/⏸); gate PASS (pos exit0, neg no-edge + missing-when bắt đúng, render đúng, regression 11/11) | @claude |
 | 2026-05-30 | Session D.3 DONE — executor pause→awaiting + Resume-kèm-decision (`workflow.ps1` + `run.ps1`); gate PASS (1-cạnh approve→terminal, 2-cạnh approve/reject rẽ đúng, events awaiting+resumed, regression 11/11) | @claude |
 | 2026-05-30 | Session D.4 DONE — headless `-AutoApprove` + exit-3 awaiting + `status` hiển gate (`workflow.ps1` + `run.ps1` + `status.ps1`); gate PASS (no-flag exit 3+hint, -AutoApprove terminal, status ⏸+prompt, resume→terminal, regression 11/11) | @claude |
+| 2026-05-30 | Session D.6 DONE — diff-violation→awaiting gate wire + `examples/approval-demo/` + selftest 11→12; gate PASS (12/12 PASS, diff-violation event ghi đúng, e2e-harness-tests không hồi quy, regression 12/12) | @claude |
+| 2026-05-30 | Session D.7 DONE — docs README (mục HITL + events schema) + CLAUDE.md (events.ps1·approval-demo·workflow/validate/viz/e2e/test-runner cập nhật·Phase D ✅) + ROADMAP (D ✅ + §Bàn-giao-D→E/F bảng 4 cross-cut + event schema + surface F). Gate PASS: regression 12/12 | @claude |
+| 2026-05-30 | BUG-FIX (real-run user-initiated) — diff-scope false-positive: default whitelist thêm `.runs/`+`memory/` (engine tự quản) vì snapshot bọc cả workflow; unit test +case 4+5; docs cập nhật; test [5] 11/11 + regression 12/12 | @claude |
+| 2026-05-30 | **✅ ĐÓNG PHASE D (user duyệt)** — HITL (approval/awaiting/resume-decision) + events.ndjson full-output + Test-DiffScope CC-b (vá false-positive) + approval-demo + selftest 12/12. Bàn giao D→E/F ghi ROADMAP | @user+@claude |

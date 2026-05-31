@@ -124,6 +124,29 @@ try {
     $r3 = Test-DiffScope $d5sb $allowed -Before $b3 -After $a3
     Assert ($r3.ok)                             "chỉ projects/ touch → ok=True"
     Assert ($r3.violations.Count -eq 0)          "chỉ projects/ → violations rỗng"
+
+    # Case 4: DEFAULT whitelist (không truyền -AllowedPaths) — engine TỰ QUẢN .runs/ + memory/
+    # được phép (bug-fix: snapshot bọc cả workflow nên engine tự sinh .runs/state.json,
+    # events.ndjson, memory/context.md... KHÔNG được tính builder vi phạm).
+    $b4 = @{ "spec.json" = 100L }
+    $a4 = @{
+        "spec.json"                  = 100L
+        ".runs/20260530/state.json"  = 200L   # engine sinh
+        ".runs/20260530/events.ndjson" = 201L # engine sinh
+        ".runs/latest.json"          = 202L   # engine sinh
+        "memory/context.md"          = 203L   # record node ghi
+        "projects/app/workflow.json" = 204L   # builder output
+    }
+    $r4 = Test-DiffScope $d5sb -Before $b4 -After $a4   # default whitelist
+    Assert ($r4.ok)                             "default: .runs/+memory/+projects/ → ok=True (không false-positive)"
+    Assert ($r4.violations.Count -eq 0)          "default: engine-managed dirs → violations rỗng"
+
+    # Case 5: DEFAULT whitelist vẫn bắt ghi ngoài (vd hq/agents/) → violation
+    $b5 = @{ "spec.json" = 100L }
+    $a5 = @{ "spec.json" = 100L; ".runs/x/state.json" = 200L; "hq/agents/evil.md" = 999L }
+    $r5 = Test-DiffScope $d5sb -Before $b5 -After $a5
+    Assert (-not $r5.ok)                        "default: ghi hq/agents/ → ok=False (vẫn bắt out-of-scope)"
+    Assert ($r5.violations[0] -match 'added.*hq') "default: violation mô tả đúng (added hq/)"
 }
 finally {
     Remove-Runs $hqDir

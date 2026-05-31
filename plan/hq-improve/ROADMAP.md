@@ -120,8 +120,8 @@ A đi đầu (de-risk). B + C dựa A; D dựa C (engine sạch rồi mới thê
 | A — Audit (findings) | `plan/hq-improve/phase-a/` | ✅ DONE (5/5 session) — `findings.md` chốt: 25 finding, 0 P0, 3 P1; user duyệt 2026-05-28 |
 | B — CLI & docs ergonomics (#1) | `plan/hq-improve/phase-b/` | ✅ DONE (4/4 session, 2026-05-29) — 13 lệnh tên mới (graph/autobuild/autofix/selftest) + alias im lặng + Show-Help nhóm + A-10 + A-01-hint (`run.ps1`); `engine/test-runner.ps1` (`selftest` gom 11 mục); README 3 luồng + doc A-01/05/15/24+sandbox; user duyệt. Engine executor bất biến |
 | C — Fix bug + de-chắp-vá | `plan/hq-improve/phase-c/` | ✅ DONE (10/10 session, 2026-05-29 → 2026-05-30) — 22 finding Phase-đích-C đóng hết (accessor·cast-số·path-guard·validate-gap·stamp·memory·router·frontmatter·edit·A-08 stderr); CC-a+CC-c đóng; A-08 xác nhận bằng 2 REAL-RUN (`autobuild hq -Real` 6-call output sạch + `run hello -Real` stderr tách kênh đúng, 0 leak). Mock-path bất biến (selftest 11/11). ⚠️ Phát hiện builder non-det xoá sandbox giữa real-run → CC-b Phase D/F. ✅ user duyệt đóng phase 2026-05-30 |
-| D — Engine HITL + event stream (#3) | `plan/hq-improve/phase-d/` | 🟡 long-plan soạn xong (3 sub-phase / 7 session), chưa thực thi — D.1 events.ndjson full-output · D.2 node `approval` · D.3 pause→awaiting+Resume-Decision (reuse resume) · D.4 headless `-AutoApprove`/fail-rõ · D.5 `Test-DiffScope` (CC-b) · D.6 violation→awaiting+approval-demo · D.7 docs+gate. Default D-D1..D-D5 (user skip câu hỏi 2026-05-30→"Recommended") |
-| E — App I: workflow viewer (#4) | `plan/hq-improve/phase-e/` | ⬜ |
+| D — Engine HITL + event stream (#3) | `plan/hq-improve/phase-d/` | ✅ DONE (7/7 session, user duyệt 2026-05-30) — `engine/events.ps1` + `events.ndjson` 7 loại event full-output · node `approval` (validate/viz hexagon ⏸) · executor pause→awaiting + `Resume-Workflow -Decision` · headless `-AutoApprove`+exit-3+`status` awaiting · `Test-DiffScope` CC-b (snapshot+whitelist `projects/`+`spec.json`+`.runs/`+`memory/`) · diff-violation→awaiting + `examples/approval-demo/` (selftest 11→12). Graph không-gate chạy y hệt (mock-path bất biến, selftest 12/12). ⚠️ real-run user-initiated phơi + vá false-positive diff-scope (engine tự quản `.runs/`/`memory/` thêm vào whitelist). Bàn giao E/F: xem §Bàn-giao-D→E/F |
+| E — App I: workflow viewer (#4) | `plan/hq-improve/phase-e/` | 🟡 soạn xong (2026-05-31), chưa thực thi — 3 sub-phase / 6 session. **REVISE D-1**: stack đổi sang React+Vite+Tailwind+React Flow+dagre (user chốt 2026-05-31; lý do: Phase F nặng + lib node-graph sẵn). Persist `.layout.json`+server-POST (coordinate-free). E.1 scaffold · E.2 data-layer (`graph -Json` additive) · E.3 render+dagre · E.4 zoom/pan/drag · E.5 persist · E.6 docs+gate |
 | F — App II: live log + duyệt (#3) | `plan/hq-improve/phase-f/` | ⬜ |
 | G — App III: in-app edit (tuỳ chọn) | `plan/hq-improve/phase-g/` | ⬜ |
 
@@ -161,6 +161,33 @@ A đi đầu (de-risk). B + C dựa A; D dựa C (engine sạch rồi mới thê
 | **CC-a** mock CẦN-không-ĐỦ | ✅ Tầng kiểm frontmatter tĩnh `Test-FrontmatterPermissions` (quyền ghi-file `acceptEdits`→Write/Edit) chạy free trong `Test-DryRunGate` trước real (C.9) | đủ ở C — tầng tĩnh bắt được divergence quyền trước khi đốt token |
 | **CC-b** builder non-determinism | ✅ A-08 làm sạch INPUT (stderr không lẫn `$raw`) — bớt 1 nguồn nhiễu (C.10, xác nhận real-run). ⚠️ **Bằng chứng mới (real-run C.10):** builder (non-det, có `Bash`) đã **xoá `sandbox/<id>/.runs/` GIỮA run** → tester/record fail, run không tới terminal. Builder BẮT BUỘC cần Bash (gọi `pwsh ENGINE_RUN build`) nên KHÔNG gỡ Bash được. | **verify diff-scope** (chỉ cho builder đụng path khai báo — vd whitelist `projects/<name>` + `spec.json`, chặn xoá ngoài) + **HITL duyệt diff** → **Phase D** (engine pause/event/guard) / **Phase F** (app duyệt). Mức ưu tiên cao hơn dự kiến: đây là lỗi chặn real-E2E tự động, không chỉ "nhiễu". |
 | **A-15** log "(N chars)" observability | (doc đã ở B) | **stream output trực tiếp** lúc run → **Phase E** (app live-log) |
+
+---
+
+## Bàn giao D→E/F (chốt cuối D.7 — 2026-05-30)
+
+> Phase D cung cấp **cơ sở hạ tầng engine**; phần UI/streaming/duyệt thuộc Phase E/F. Chi tiết: `phase-d/PLAN.md` §"Bàn giao sang E/F".
+
+| Cross-cut | D đã làm (✅) | Phase sau phải làm tiếp |
+| --- | --- | --- |
+| **#3 live log** | `events.ndjson` đầy đủ output mỗi node (engine phát, 7 loại event, full content) | **Server stream SSE** + app hiển thị live output + highlight node đang chạy → **Phase F** |
+| **#3 HITL duyệt** | Engine pause `awaiting` (node `approval` + diff-violation) + `Resume-Workflow -Decision` + surface CLI (`run.ps1 resume -Decision`, exit 3, `status` hiển gate) | **UI duyệt plan / cấp quyền** (post decision về server→engine tiếp) → **Phase F** |
+| **CC-b diff** | `Test-DiffScope` (whitelist `projects/<name>`+spec, bắt xoá ngoài) + diff-violation→awaiting (chặn promote mù) | **UI duyệt diff** (hiện diff builder cho người xem, approve/reject) → **Phase F** |
+| **#4 viewer** | Node `approval` render rõ (ASCII `⏸` + Mermaid hexagon) — app đọc workflow.json vẽ được gate | **App vẽ graph** + ký hiệu gate + zoom/pan/drag → **Phase E** |
+
+**Schema event** (`events.ndjson`) để Phase F dùng:
+- Field cố định: `seq` (int, tăng dần), `ts` (ISO), `type`, `node`, `agent`
+- `node_output`: thêm `output` (full string content)
+- `awaiting`: thêm `awaiting.node`, `awaiting.prompt`, `awaiting.choices[]`
+- `resumed`: thêm `decision` (label nhận từ user/app)
+- `diff_violation`: thêm `violations[]` (list path ngoài whitelist)
+- `run_end`: thêm `status`, `terminal` (node terminal hoặc null)
+
+**Surface engine** Phase F cần gọi:
+- Chạy run: `run.ps1 run <proj> "<req>" [-Mock] [-AutoApprove]` → exit 0 (done) / exit 3 (awaiting) / exit≠0 (fail)
+- Bơm quyết định: `run.ps1 resume <proj> -Decision <label>` → tiếp tục từ awaiting
+- Đọc trạng thái: `run.ps1 status <proj>` → in state + awaiting info nếu có
+- Đọc events: `<proj>/.runs/<id>/events.ndjson` (NDJSON, stream đuôi được)
 
 ---
 

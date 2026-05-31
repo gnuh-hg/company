@@ -244,6 +244,9 @@ function Invoke-E2E {
     # --- (b)–(f) Real run trong sandbox cô lập ---
     $sandboxDir = Copy-ToSandbox $ProjectDir
     try {
+        # D.6 CC-b: chụp snapshot TRƯỚC builder (toàn bộ workflow) để diff-scope check sau.
+        $snapBefore = Get-SandboxSnapshot $sandboxDir
+
         # (c) chạy HQ THẬT (no -Mock) — executor truyền frontmatter flags (wiring 5.1).
         $runDir = Invoke-Workflow $sandboxDir $Request
         $state  = Get-RunState $runDir
@@ -254,6 +257,18 @@ function Invoke-E2E {
             return [ordered]@{
                 stage = 'real-run'; pass = $false; dryrun = $dry
                 reason = "real run state='$status' terminal='$terminal' (kỳ vọng done→record)"
+            }
+        }
+
+        # D.6 CC-b: snapshot SAU workflow → kiểm builder chỉ đụng whitelist (projects/ + spec.json).
+        $snapAfter   = Get-SandboxSnapshot $sandboxDir
+        $scopeResult = Test-DiffScope $sandboxDir -Before $snapBefore -After $snapAfter
+        if (-not $scopeResult.ok) {
+            Write-Event $runDir 'diff_violation' @{ violations = [string[]]$scopeResult.violations }
+            return [ordered]@{
+                stage = 'diff_violation'; pass = $false; dryrun = $dry; branch = $null
+                diff_scope = $scopeResult
+                reason = "diff-scope violation — KHÔNG promote. Vi phạm: $(($scopeResult.violations) -join '; ')"
             }
         }
 
@@ -430,7 +445,10 @@ function Test-DiffScope {
         Đặc biệt bắt builder xoá .runs/ (vật chứng C.10 Phase C).
     .PARAMETER SandboxDir    Sandbox root tuyệt đối (caller truyền đã resolve).
     .PARAMETER AllowedPaths  Danh sách path tuyệt đối được phép đụng.
-                             Mặc định: [SandboxDir/projects, SandboxDir/spec.json].
+                             Mặc định: [SandboxDir/projects, SandboxDir/spec.json,
+                             SandboxDir/.runs, SandboxDir/memory] — 2 cái sau là vùng
+                             engine TỰ QUẢN (run artifacts + memory write), KHÔNG phải
+                             builder scope nên không tính vi phạm khi snapshot bọc cả workflow.
     .PARAMETER Before        Snapshot trước builder (hashtable từ Get-SandboxSnapshot).
     .PARAMETER After         Snapshot sau builder (hashtable từ Get-SandboxSnapshot).
     .OUTPUTS [ordered]@{ ok=[bool]; violations=[string[]] }
@@ -448,8 +466,10 @@ function Test-DiffScope {
 
     $apList = if ($AllowedPaths -and @($AllowedPaths).Count -gt 0) { @($AllowedPaths) } else {
         @(
-            (Join-Path $sbFull 'projects')
-            (Join-Path $sbFull 'spec.json')
+            (Join-Path $sbFull 'projects')   # builder scope — output branch
+            (Join-Path $sbFull 'spec.json')  # build-spec input
+            (Join-Path $sbFull '.runs')      # engine TỰ QUẢN: run artifacts (state/events/output_key txt)
+            (Join-Path $sbFull 'memory')     # engine TỰ QUẢN: memory write (record node)
         )
     }
 

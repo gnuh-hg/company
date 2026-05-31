@@ -7,3 +7,8 @@ sandbox/
 # Branch chi nhánh HQ sinh ra (Phase 5 promote) — regen được từ build-spec, không commit.
 # Giữ thư mục projects/ (placeholder), bỏ qua mọi branch con.
 projects/*/
+
+# App viewer (Phase E) — build artifact + deps + layout app-side (coordinate-free).
+app/node_modules/
+app/dist/
+**/.layout.json

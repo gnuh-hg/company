@@ -1,0 +1,14 @@
+{
+  "name": "approval-demo",
+  "entry": "planner",
+  "max_steps": 10,
+  "nodes": [
+    { "id": "planner", "agent": "agents/planner.md", "input": "{{user_request}}", "output_key": "plan" },
+    { "id": "gate", "type": "approval", "prompt": "Duyệt plan trước khi builder chạy?" },
+    { "id": "builder", "agent": "agents/builder.md", "input": "{{plan}}", "output_key": "result" }
+  ],
+  "edges": [
+    { "from": "planner", "to": "gate" },
+    { "from": "gate", "to": "builder" }
+  ]
+}

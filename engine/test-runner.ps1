@@ -81,11 +81,19 @@ function Clear-MemDemoArtifacts {
     }
 }
 
+function Clear-ApprovalDemoArtifacts {
+    <# .SYNOPSIS Dọn .runs/ của approval-demo (fixture phải start sạch + không để rác). #>
+    param([Parameter(Mandatory)][string]$Dir)
+    $p = Join-Path $Dir '.runs'
+    if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
+}
+
 function Invoke-SelfTest {
     <#
     .SYNOPSIS
         Chạy bộ test engine: 3 test script (subprocess) + 7 p-*/stamp.ps1 (subprocess) +
-        mem-demo done-gate (2-run -Mock inline). In PASS/FAIL từng mục + bảng tổng.
+        mem-demo done-gate (2-run -Mock inline) + approval-demo done-gate (pause→resume→done inline).
+        In PASS/FAIL từng mục + bảng tổng.
     .OUTPUTS [int] số mục FAIL (0 = tất cả pass).
     #>
     param([string[]]$Pos)   # [all] hiện không phân nhóm — luôn chạy hết (B surface).
@@ -161,6 +169,31 @@ function Invoke-SelfTest {
     $items.Add([pscustomobject]@{ Name = 'mem-demo/done-gate'; Pass = $memOk; Detail = $memDetail })
     Write-SelfTestLine 'mem-demo/done-gate' $memOk $memDetail
 
+    # 4) approval-demo done-gate (pause→resume→done, inline) --------------------
+    Write-Host ''
+    Write-Host '── approval-demo (done-gate pause→resume) ──'
+    $approvalDir = Join-Path $examples 'approval-demo'
+    $adOk = $false; $adDetail = ''
+    try {
+        Clear-ApprovalDemoArtifacts $approvalDir
+        # Run 1: không -AutoApprove → dừng awaiting tại approval gate
+        $r1 = Invoke-Workflow $approvalDir 'demo selftest' -Mock 6> $null
+        $s1 = [string](Get-RunState $r1).status
+        # Run 2: resume với -Decision approve → tiếp tới terminal builder (done)
+        $r2 = Invoke-Workflow $approvalDir -Mock -Resume -Decision 'approve' 6> $null
+        $s2 = [string](Get-RunState $r2).status
+        $adOk     = ($s1 -eq 'awaiting' -and $s2 -eq 'done')
+        $adDetail = "run1=$s1 run2(resume approve)=$s2"
+    }
+    catch {
+        $adOk = $false; $adDetail = $_.Exception.Message
+    }
+    finally {
+        Clear-ApprovalDemoArtifacts $approvalDir
+    }
+    $items.Add([pscustomobject]@{ Name = 'approval-demo/done-gate'; Pass = $adOk; Detail = $adDetail })
+    Write-SelfTestLine 'approval-demo/done-gate' $adOk $adDetail
+
     # Bảng tổng -----------------------------------------------------------------
     $fails = @($items | Where-Object { -not $_.Pass }).Count
     $total = $items.Count
@@ -174,7 +207,7 @@ function Invoke-SelfTest {
     else {
         Write-Host "✗ selftest: $fails/$total FAIL" -ForegroundColor Red
     }
-    Write-Host '  (C.6: stamp assert nội dung node id; C.7: mem-demo assert "run2 ≠ run1")' -ForegroundColor DarkGray
+    Write-Host '  (C.6: stamp assert nội dung node id; C.7: mem-demo assert "run2 ≠ run1"; D.6: approval-demo pause→resume→done)' -ForegroundColor DarkGray
     return $fails
 }
 
