@@ -1,0 +1,42 @@
+{
+  "name": "edit-demo",
+  "entry": "writer",
+  "max_steps": 10,
+  "nodes": [
+    {
+      "id": "writer",
+      "agent": "agents/writer.md",
+      "input": "{{user_request}}",
+      "output_key": "draft"
+    },
+    {
+      "id": "checker",
+      "type": "router",
+      "agent": "agents/checker.md",
+      "input": "{{draft}}",
+      "output_key": "verdict"
+    },
+    {
+      "id": "publisher",
+      "agent": "agents/publisher.md",
+      "input": "{{draft}}",
+      "output_key": "result"
+    }
+  ],
+  "edges": [
+    {
+      "from": "writer",
+      "to": "checker"
+    },
+    {
+      "from": "checker",
+      "to": "publisher",
+      "when": "pass"
+    },
+    {
+      "from": "checker",
+      "to": "writer",
+      "when": "revise"
+    }
+  ]
+}

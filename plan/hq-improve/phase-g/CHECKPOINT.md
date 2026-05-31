@@ -25,9 +25,9 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 0 | 0% |
+| Sessions hoàn thành | 6 | 1 | 17% |
 | Sub-phase đóng | 3 (G-I/G-II/G-III) | 0 | 0% |
-| Engine `save-graph` (additive) | 1 lệnh + fixture `edit-demo` | — | — |
+| Engine `save-graph` (additive) | 1 lệnh + fixture `edit-demo` | ✅ G.1 DONE | 100% |
 | Server `POST /api/workflow` | validate-gated, reject-on-invalid | — | — |
 | Edit UI (cạnh + node + graph-level) | full structural | — | — |
 | Coordinate-free verified | `git diff workflow.json` ZERO toạ độ | — | — |
@@ -38,10 +38,10 @@
 ## Đang ở đâu
 
 - **Phase**: G (App III — in-app edit; **tuỳ chọn — user chốt LÀM** 2026-06-01 vì gap CLI edit không phủ graph-format)
-- **Session kế tiếp**: **G.1 — Engine `save-graph` (additive): write→validate→commit-or-restore**
-- **Blocker**: — (Phase E + F đã DONE; nền app shell + server + GraphView + `/api/graph`+`/api/layout` sẵn)
-- **Reference**: `PLAN.md` Phase G → Session G.1 · ROADMAP §Phase G + §Bàn-giao-E→F/G + §Bàn-giao-F→G
-- **Nhắc G.1**: module `engine/save.ps1` (`Save-Graph` backup-write-validate-restore, pattern từ `edit.ps1:285-295` nút 'v') + strip toạ độ + `Write-SaveResult` JSON stdout + `run.ps1 save-graph <proj> <file>` + guard path (`Test-PathInside`) + fixture `examples/edit-demo/` (graph nhỏ, committed). Reuse `lib/json.ps1` (`Read-Json`/`Write-Json`) + `validate.ps1` (`Test-Workflow`). Dot-source-safe.
+- **Session kế tiếp**: **G.2 — Server `POST /api/workflow` (shell save-graph, reject UX)**
+- **Blocker**: — (G.1 DONE; `engine/save.ps1` + `run.ps1 save-graph` + `examples/edit-demo/` sẵn)
+- **Reference**: `PLAN.md` Phase G → Session G.2 · ROADMAP §Phase G
+- **Nhắc G.2**: `POST /api/workflow?project=<p>` body `{nodes,edges,entry,max_steps}` → strip coords server-side → ghi temp file → shell `pwsh -NoProfile -File run.ps1 save-graph <p> <tmpfile>` → **parse stdout** `{ok,errors[]}` (KHÔNG tin exit code) → ok:true⇒200; ok:false⇒422+errors[]. Reuse `SAFE_PROJECT`+`resolveProjectDir` (E/F sẵn). Dọn temp. Bind `127.0.0.1`. Dependency-free (Node core).
 
 ---
 
@@ -54,6 +54,18 @@
 ---
 
 ## Per-session log
+
+### 2026-06-01 — Session G.1 — Engine `save-graph`
+- **Done**: `engine/save.ps1` (`Strip-GraphCoordinates` + `Save-Graph` backup→strip→write→validate→commit-or-restore + `Write-SaveResult` JSON stdout) + `run.ps1 save-graph` dispatch (allowlist, help, switch case) + fixture `examples/edit-demo/` (3-node graph: writer→checker(router)→publisher + revise back-edge, 3 agent stubs).
+- **STOP gate verified**:
+  - Candidate hợp lệ → `{"ok":true,"errors":[]}` + `workflow.json` cập nhật.
+  - Candidate hỏng (router thiếu `when`) → `{"ok":false,"errors":[...2 errors...]}` + SHA256 workflow.json BẤT BIẾN.
+  - Candidate có `x/y` → `workflow.json` ghi ra ZERO `"x"` (grep=0).
+  - Regression: validate hello=0 · run hello -Mock=done · selftest 12/12 PASS.
+  - `git diff engine/` = chỉ `run.ps1` (additive); `save.ps1` file mới (untracked).
+  - `run.ps1 graph hq -Json` và ASCII/Mermaid vẫn hoạt động (đường đọc bất biến).
+- **Output**: `engine/save.ps1` + `engine/run.ps1` (additive `save-graph`) + `examples/edit-demo/`.
+- **Next**: Session G.2 — Server `POST /api/workflow`.
 
 ### 2026-06-01 — Session G.0 (soạn plan)
 - **Done**: Soạn `PLAN.md` + `CHECKPOINT.md` Phase G. Đọc CLAUDE.md + ROADMAP + Phase E/F PLAN + `engine/edit.ps1` (phát hiện gap: `edit.ps1` chỉ pipeline-v1, từ chối graph-format A-18 dòng 183-187). Xác nhận `hq`/`loopy`/`branchy`/`approval-demo` đều graph-format (không có editor). Chốt G-D1/G-D2/G-D3 với user.

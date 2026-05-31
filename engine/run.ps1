@@ -30,6 +30,7 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $here 'spec.ps1')
 . (Join-Path $here 'e2e.ps1')
 . (Join-Path $here 'test-runner.ps1')
+. (Join-Path $here 'save.ps1')
 
 function Show-Help {
     <#
@@ -56,7 +57,8 @@ function Show-Help {
         '  autofix   <proj> "<req>" -Seed <br> -Branch <n>  Fix-loop branch hỏng → verify      (cũ: e2efix)',
         '',
         'AUTHOR — soạn workflow:',
-        '  edit     <proj>                                  TUI thêm/xoá/đổi node + agent + deps',
+        '  edit       <proj>                                TUI thêm/xoá/đổi node + agent + deps',
+        '  save-graph <proj> <candidate-file>             Ghi graph candidate (validate-gated, reject-on-invalid)',
         '',
         'Advanced:',
         '  selftest [all]                                   Chạy bộ test engine (script+stamp+mem-demo)  (cũ: test)',
@@ -170,7 +172,7 @@ function Invoke-Dispatch {
 
     if ($command -in @('help', '-h', '--help')) { Show-Help; return 0 }
 
-    if ($command -notin @('run', 'resume', 'graph', 'validate', 'check', 'trial', 'build', 'autobuild', 'autofix', 'status', 'logs', 'edit', 'selftest')) {
+    if ($command -notin @('run', 'resume', 'graph', 'validate', 'check', 'trial', 'build', 'autobuild', 'autofix', 'status', 'logs', 'edit', 'save-graph', 'selftest')) {
         Write-Host "Command không hợp lệ: '$command'" -ForegroundColor Red
         Write-Host ''
         Show-Help
@@ -364,7 +366,22 @@ function Invoke-Dispatch {
             Show-Logs $projectDir $stepArg
             return 0
         }
-        'edit'   { return (Invoke-Edit $projectDir) }
+        'edit'       { return (Invoke-Edit $projectDir) }
+        'save-graph' {
+            if ($pos.Count -lt 2) {
+                Write-Host "save-graph cần: save-graph <project> <candidate-file>" -ForegroundColor Red
+                return 2
+            }
+            $candFile = $pos[1]
+            if (-not (Test-Path -LiteralPath $candFile)) {
+                Write-Host "save-graph: không tìm thấy candidate-file '$candFile'" -ForegroundColor Red
+                return 2
+            }
+            $candidate = Read-Json $candFile
+            $result    = Save-Graph $projectDir $candidate
+            Write-SaveResult $result
+            return ([int]($result.errors.Count))
+        }
     }
 }
 
