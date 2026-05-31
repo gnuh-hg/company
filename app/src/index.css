@@ -8,3 +8,9 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/* Live run highlight pulse for active/awaiting nodes (Phase F.4) */
+@keyframes rfPulse {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.08); }
+}

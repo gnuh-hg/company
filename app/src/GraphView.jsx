@@ -95,7 +95,7 @@ function FitOnLoad({ ready }) {
 
 // ── GraphView ──────────────────────────────────────────────────────────────
 
-export default function GraphView({ project }) {
+export default function GraphView({ project, nodeStatuses = {} }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [meta, setMeta] = useState(null); // { entry, max_steps, nodeCount, edgeCount }
@@ -163,6 +163,20 @@ export default function GraphView({ project }) {
 
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [project]);
+
+  // Sync live run status into node.data.runStatus (preserves positions/layout).
+  useEffect(() => {
+    setNodes(prev => {
+      let changed = false;
+      const next = prev.map(n => {
+        const rs = nodeStatuses[n.id] ?? null;
+        if ((n.data.runStatus ?? null) === rs) return n;
+        changed = true;
+        return { ...n, data: { ...n.data, runStatus: rs } };
+      });
+      return changed ? next : prev;
+    });
+  }, [nodeStatuses, setNodes]);
 
   // Reset to dagre auto-layout: restore saved dagre positions + clear server layout file
   const resetLayout = useCallback(() => {

@@ -19,24 +19,31 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 2 | 33% |
+| Sessions hoàn thành | 6 | 3 | 50% |
 | Sub-phase đóng | 3 (F-I/F-II/F-III) | 1 (F-I) | 33% |
 | Server endpoint F | 3 (`/api/run`, `/api/events` SSE, `/api/decision`) | 3 | 100% |
 | Done-gate F (HQ mock: live log + highlight → gate → approve → terminal; + reject/đổi nhánh) | pass | — | — |
-| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2 | — |
+| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2·F.3 | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: F — **Session F.2 DONE** (2026-05-31). Sub-phase F-I (server backend) ĐÓNG. 3 endpoint F đủ.
-- **Session kế tiếp**: **F.3** — EventSource client + live log panel (full output per node) trên `app/src/`.
-- **Blocker**: — (SSE tail + decision verified end-to-end qua mock: hello full chain + approval-demo awaiting→approve→terminal).
-- **Reference**: `PLAN.md` Phase F → Session F.3.
+- **Phase**: F — **Session F.3 DONE** (2026-05-31). Sub-phase F-I (server backend) ĐÓNG. F.3 thêm nút Run + RunLog panel.
+- **Session kế tiếp**: **F.4** — highlight node đang chạy trên React Flow (running/done/awaiting) theo event live.
+- **Blocker**: — (SSE + RunLog full chain verified: hello run_start→node_output(nội dung thật)→run_end + event:end; bundle chứa EventSource/api/run/api/events/Run(Mock)/node_output).
+- **Reference**: `PLAN.md` Phase F → Session F.4.
 
 ---
 
 ## Per-session log
+
+### 2026-05-31 — Session F.3 (EventSource client + RunLog panel)
+- **Done**: (1) **`RunLog.jsx`** (component mới) — renders mỗi loại event thành row: `run_start` (▶ Run started), `node_start` (→ node agent), `node_output` (nội dung thật full trong `<pre>` có scroll max 220px), `node_done` (✓), `awaiting` (⏸ nổi bật nền tím), `resumed` (▶ resumed + decision), `run_end` (■ status màu + terminal), `diff_violation` (⚠ + violations list), fallback raw JSON. Auto-scroll ref khi events.length đổi. Panel header: "Run Log" chip + status pill (màu theo idle/running/done/awaiting/failed) + nút Clear. (2) **`App.jsx`** — thêm run state (runId/events/runStatus/runErr) + `esRef` (EventSource ref cleanup on unmount). Nút **▶ Run (Mock)** trong header: POST /api/run → nhận {runId} → mở EventSource(`/api/events?project=&run=`) → parse events (dedup bằng seq) → update runStatus từ `run_end`/`awaiting`. `event: end` → đóng ES. Selector project thay đổi → clear run state. Layout: `main` split flexColumn (graph flex:1 minHeight:0 / log panel 280px cố định khi showLog). `handleClear` tắt ES + reset state.
+- **Output**: `app/src/RunLog.jsx` (mới) + `app/src/App.jsx` (update). Build thành công (487 modules). Bundle chứa EventSource/api/run/api/events/Run(Mock)/node_output.
+- **Gate**: ✅ **POST /api/run hello** → {runId, runDir} + events.ndjson EXISTS. ✅ **SSE hello full chain**: run_start→node_start→node_output(output=`[MOCK:echo-a]\nping`, nội dung thật)→node_done→run_end(done)→event:end. ✅ `git diff engine/` = RỖNG.
+- **Next**: Session F.4 — highlight node trên React Flow theo event live (running/done/awaiting).
+- **Notes**: ⚠️ **`hq`/`loopy`/router projects không ghi `latest.json` khi fail** (router label không khớp `when` → engine throw trước khi ghi). Poll timeout ra 504. Đây là engine behavior (BẤT BIẾN). Workaround: test F.3 gate bằng pipeline projects không có router (hello, web-demo, mem-demo). F.4 dùng `approval-demo` (có `awaiting` real) + `hello` (fast done). pwsh SIGABRT khi spawn từ Node với `/snap/bin/pwsh` — giữ PATH `pwsh` (default).
 
 ### 2026-05-31 — Session F.2 (GET /api/events SSE + POST /api/decision)
 - **Done**: 2 endpoint additive vào `server.mjs` (E + F.1 bất biến, dependency-free). (1) **`GET /api/events?project=&run=`** — SSE `text/event-stream`: tail `<run>/events.ndjson` theo **byte-offset** (đọc qua `fs.open`+`read` mỗi 300ms), decode-tới-newline-cuối (multibyte UTF-8 không vỡ ở ranh giới tick — `pending` Buffer giữ phần dư), đẩy mỗi dòng NDJSON `data: <line>`; parse `.type==='run_end'` → gửi `event: end` + `res.end()`; heartbeat `: ping` 15s; `req.on('close')` clear timers. (2) **`POST /api/decision {project,run,decision}`** — spawn `run.ps1 resume <p> -Decision <label> [-Mock]` (mock-mode lấy từ run registry, default mock nếu entry mất) → resume ghi tiếp CÙNG `events.ndjson` → SSE đang mở tự đọc byte mới. Guard: `SAFE_PROJECT` cho project+run, decision label regex `^[A-Za-z0-9_-]+$` (chặn command-injection).

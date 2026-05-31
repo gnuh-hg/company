@@ -1,13 +1,44 @@
 import { Handle, Position } from '@xyflow/react';
 
+// ── Live run highlight (Phase F.4) ──────────────────────────────────────────
+// runStatus is injected into node.data by GraphView from the live event stream.
+const RUN_RING = {
+  running:  { boxShadow: '0 0 0 3px #3b82f6, 0 0 14px 3px rgba(59,130,246,.45)', animation: 'rfPulse 1.3s ease-in-out infinite' },
+  done:     { boxShadow: '0 0 0 2.5px #22c55e' },
+  awaiting: { boxShadow: '0 0 0 3px #9333ea, 0 0 14px 3px rgba(147,51,234,.45)', animation: 'rfPulse 1.3s ease-in-out infinite' },
+};
+function runRing(rs) { return rs ? (RUN_RING[rs] ?? {}) : {}; }
+
+const BADGE = {
+  running:  { bg: '#3b82f6', glyph: '●' },
+  done:     { bg: '#22c55e', glyph: '✓' },
+  awaiting: { bg: '#9333ea', glyph: '⏸' },
+};
+function StatusBadge({ status }) {
+  const b = status && BADGE[status];
+  if (!b) return null;
+  return (
+    <div style={{
+      position: 'absolute', top: -7, right: -7, zIndex: 3,
+      width: 16, height: 16, borderRadius: '50%',
+      background: b.bg, color: '#fff', fontSize: 9, fontWeight: 700,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 1px 2px rgba(0,0,0,.3)', border: '1.5px solid #fff',
+    }}>
+      {b.glyph}
+    </div>
+  );
+}
+
 // ── WorkerNode ─────────────────────────────────────────────────────────────
 // Standard worker node: white rect with blue left border.
 export function WorkerNode({ data }) {
   return (
     <div
       className="rounded border border-blue-300 bg-white shadow-sm"
-      style={{ width: 164, minHeight: 52, borderLeft: '4px solid #3b82f6', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '6px 10px' }}
+      style={{ width: 164, minHeight: 52, borderLeft: '4px solid #3b82f6', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '6px 10px', position: 'relative', ...runRing(data.runStatus) }}
     >
+      <StatusBadge status={data.runStatus} />
       <Handle type="target" position={Position.Top} />
       <div style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#1e293b' }}>{data.label}</div>
       {data.agent && (
@@ -27,7 +58,8 @@ export function WorkerNode({ data }) {
 // gives a proper polygon outline.
 export function RouterNode({ data }) {
   return (
-    <div style={{ width: 90, height: 90, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: 90, height: 90, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, ...runRing(data.runStatus) }}>
+      <StatusBadge status={data.runStatus} />
       <Handle type="target" position={Position.Top} style={{ top: 0 }} />
       {/* Border layer */}
       <div style={{
@@ -58,7 +90,8 @@ export function RouterNode({ data }) {
 // Approval (HITL gate) node: flat-top hexagon with ⏸ glyph.
 export function ApprovalNode({ data }) {
   return (
-    <div style={{ width: 108, height: 90, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: 108, height: 90, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, ...runRing(data.runStatus) }}>
+      <StatusBadge status={data.runStatus} />
       <Handle type="target" position={Position.Top} style={{ top: 0 }} />
       {/* Border layer */}
       <div style={{
@@ -98,9 +131,11 @@ export function TerminalNode({ data }) {
         borderColor: isError ? '#f87171' : '#4ade80',
         background: isError ? '#fff1f2' : '#f0fdf4',
         display: 'flex', flexDirection: 'column', justifyContent: 'center',
-        padding: '6px 10px',
+        padding: '6px 10px', position: 'relative',
+        ...runRing(data.runStatus),
       }}
     >
+      <StatusBadge status={data.runStatus} />
       <Handle type="target" position={Position.Top} />
       <div style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: isError ? '#9f1239' : '#166534' }}>
         ⏹{' '}{data.label}
