@@ -1,15 +1,16 @@
-// Phase E data-layer server (skeleton — E.1).
+// Phase E+F data-layer server.
 //
 // Serves the built front-end (app/dist/) as static files and exposes a tiny
-// JSON API. E.1 ships only `GET /api/health`; E.2 adds `/api/projects` and
-// `/api/graph` (shelling out to `run.ps1 graph <proj> -Json`), E.5 adds
-// `GET/POST /api/layout`. Kept dependency-free (Node http only) — full-local,
-// no cloud, no run-control/SSE (those belong to Phase F).
+// JSON API. Dependency-free (Node http/fs/child_process only). Binds localhost.
+//
+// Phase E endpoints: GET /api/health · /api/projects · /api/graph · GET/POST /api/layout
+// Phase F endpoints (F.1): POST /api/run (spawn run.ps1, race-safe discovery)
+//                  (F.2): GET /api/events (SSE tail) · POST /api/decision (resume)
 
 import { createServer } from 'node:http';
-import { readFile, stat, readdir, writeFile } from 'node:fs/promises';
+import { readFile, stat, readdir, writeFile, open } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, extname, normalize, resolve } from 'node:path';
+import { join, extname, normalize, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -21,6 +22,40 @@ const ENGINE_RUN = join(COMPANY, 'engine', 'run.ps1');
 const PWSH = process.env.PWSH || 'pwsh';
 const PORT = Number(process.env.PORT) || 5179;
 const SAFE_PROJECT = /^[A-Za-z0-9._-]+$/;
+
+// Run registry: Map<runId → {child, project, runDir, mockMode, status, startedAt}>
+const runRegistry = new Map();
+
+// Read the current run pointer from <projectDir>/.runs/latest.json (null if absent).
+async function snapshotLatestRun(projectDir) {
+  try {
+    const raw = await readFile(join(projectDir, '.runs', 'latest.json'), 'utf-8');
+    return JSON.parse(raw).run || null;
+  } catch { return null; }
+}
+
+// Poll latest.json until its `run` field differs from prevRun (new run appeared).
+// Returns the new run-id string, or null on timeout.
+async function pollForNewRunDir(projectDir, prevRun, timeoutMs = 10000, intervalMs = 200) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve) => {
+    const timer = setInterval(async () => {
+      try {
+        const raw = await readFile(join(projectDir, '.runs', 'latest.json'), 'utf-8');
+        const latest = JSON.parse(raw);
+        if (latest.run && latest.run !== prevRun) {
+          clearInterval(timer);
+          resolve(latest.run);
+          return;
+        }
+      } catch {}
+      if (Date.now() >= deadline) {
+        clearInterval(timer);
+        resolve(null);
+      }
+    }, intervalMs);
+  });
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -186,6 +221,179 @@ const server = createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true });
   }
 
+  // POST /api/run — spawn run.ps1 run <project> [request] [-Mock] [-AutoApprove]
+  // Body: {project, request?, mock?:true, autoApprove?:false}
+  // Returns: {runId, runDir, project}
+  if (pathname === '/api/run' && req.method === 'POST') {
+    let body = '';
+    try { for await (const chunk of req) body += chunk; }
+    catch { return sendJson(res, 400, { error: 'failed reading body' }); }
+    let data;
+    try { data = JSON.parse(body); } catch { return sendJson(res, 400, { error: 'invalid JSON body' }); }
+
+    const { project, request, mock = true, autoApprove = false } = data;
+    if (!project) return sendJson(res, 400, { error: 'missing project' });
+    if (!SAFE_PROJECT.test(project)) return sendJson(res, 400, { error: 'invalid project name' });
+    const projectDir = await resolveProjectDir(project);
+    if (!projectDir) return sendJson(res, 404, { error: 'project not found' });
+
+    const prevRun = await snapshotLatestRun(projectDir);
+
+    // Engine requires a non-empty request string; default to "run" when omitted.
+    const reqStr = (request && String(request).trim()) || 'run';
+    const args = ['-NoProfile', '-File', ENGINE_RUN, 'run', project, reqStr];
+    if (mock !== false) args.push('-Mock');
+    if (autoApprove) args.push('-AutoApprove');
+
+    let child;
+    try { child = spawn(PWSH, args, { cwd: COMPANY }); }
+    catch (e) { return sendJson(res, 500, { error: `cannot spawn pwsh: ${e.message}` }); }
+    // Drain stdout/stderr so the child never blocks on a full pipe.
+    child.stdout.resume();
+    child.stderr.resume();
+
+    const newRunId = await pollForNewRunDir(projectDir, prevRun);
+    if (!newRunId) {
+      try { child.kill(); } catch {}
+      return sendJson(res, 504, { error: 'run dir not detected within timeout' });
+    }
+
+    const runDir = join(projectDir, '.runs', newRunId);
+    runRegistry.set(newRunId, {
+      child, project, runDir,
+      mockMode: mock !== false,
+      status: 'running',
+      startedAt: new Date().toISOString(),
+    });
+    child.on('close', () => {
+      const entry = runRegistry.get(newRunId);
+      if (entry) entry.status = 'closed';
+    });
+
+    return sendJson(res, 200, { runId: newRunId, runDir, project });
+  }
+
+  // GET /api/events?project=<p>&run=<runId> — SSE tail of <run>/events.ndjson.
+  // Streams every NDJSON line as a `data:` frame from the start of the run.
+  // Stays open across an `awaiting` pause (resume appends to the SAME file) and
+  // closes only after a `run_end` event. Heartbeat keeps the connection alive.
+  if (pathname === '/api/events' && req.method === 'GET') {
+    const project = url.searchParams.get('project');
+    const run = url.searchParams.get('run');
+    if (!project || !run) return sendJson(res, 400, { error: 'missing project or run param' });
+    if (!SAFE_PROJECT.test(project) || !SAFE_PROJECT.test(run)) {
+      return sendJson(res, 400, { error: 'invalid project or run name' });
+    }
+    const projectDir = await resolveProjectDir(project);
+    if (!projectDir) return sendJson(res, 404, { error: 'project not found' });
+    const eventsPath = join(projectDir, '.runs', run, 'events.ndjson');
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 2000\n\n');
+
+    let offset = 0;
+    let pending = Buffer.alloc(0);
+    let ended = false;
+
+    const finish = () => {
+      if (ended) return;
+      ended = true;
+      clearInterval(tailTimer);
+      clearInterval(beatTimer);
+      try { res.write('event: end\ndata: {}\n\n'); res.end(); } catch {}
+    };
+
+    // Read new bytes since `offset`, emit complete lines only. Decoding stops at
+    // the last newline so multi-byte UTF-8 never splits across a tick.
+    const tick = async () => {
+      if (ended) return;
+      let size;
+      try { size = (await stat(eventsPath)).size; }
+      catch { return; } // file not created yet
+      if (size <= offset) return;
+      let fh;
+      try {
+        fh = await open(eventsPath, 'r');
+        const len = size - offset;
+        const buf = Buffer.alloc(len);
+        await fh.read(buf, 0, len, offset);
+        offset = size;
+        pending = Buffer.concat([pending, buf]);
+      } catch { return; }
+      finally { if (fh) await fh.close(); }
+
+      const lastNl = pending.lastIndexOf(0x0a);
+      if (lastNl === -1) return;
+      const complete = pending.subarray(0, lastNl + 1).toString('utf-8');
+      pending = pending.subarray(lastNl + 1);
+      for (const raw of complete.split('\n')) {
+        const line = raw.trim();
+        if (!line) continue;
+        res.write('data: ' + line + '\n\n');
+        let evt;
+        try { evt = JSON.parse(line); } catch { continue; }
+        if (evt.type === 'run_end') { finish(); return; }
+      }
+    };
+
+    const tailTimer = setInterval(tick, 300);
+    const beatTimer = setInterval(() => {
+      if (!ended) { try { res.write(': ping\n\n'); } catch {} }
+    }, 15000);
+    req.on('close', () => {
+      if (ended) return;
+      ended = true;
+      clearInterval(tailTimer);
+      clearInterval(beatTimer);
+    });
+    tick();
+    return;
+  }
+
+  // POST /api/decision — resume an awaiting run on the SAME run dir.
+  // Body: {project, run, decision}. Spawns `run.ps1 resume … -Decision <label>`;
+  // the open SSE picks up the newly-appended events (resume continues the same
+  // events.ndjson, seq self-sequencing). Reuses the run's original mock mode.
+  if (pathname === '/api/decision' && req.method === 'POST') {
+    let body = '';
+    try { for await (const chunk of req) body += chunk; }
+    catch { return sendJson(res, 400, { error: 'failed reading body' }); }
+    let data;
+    try { data = JSON.parse(body); } catch { return sendJson(res, 400, { error: 'invalid JSON body' }); }
+
+    const { project, run, decision } = data;
+    if (!project || !run || !decision) return sendJson(res, 400, { error: 'missing project, run, or decision' });
+    if (!SAFE_PROJECT.test(project) || !SAFE_PROJECT.test(run)) {
+      return sendJson(res, 400, { error: 'invalid project or run name' });
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(decision)) return sendJson(res, 400, { error: 'invalid decision label' });
+    const projectDir = await resolveProjectDir(project);
+    if (!projectDir) return sendJson(res, 404, { error: 'project not found' });
+
+    const entry = runRegistry.get(run);
+    const mockMode = entry ? entry.mockMode : true; // default mock = safe (no token burn)
+    const args = ['-NoProfile', '-File', ENGINE_RUN, 'resume', project, '-Decision', decision];
+    if (mockMode) args.push('-Mock');
+
+    let child;
+    try { child = spawn(PWSH, args, { cwd: COMPANY }); }
+    catch (e) { return sendJson(res, 500, { error: `cannot spawn pwsh: ${e.message}` }); }
+    child.stdout.resume();
+    child.stderr.resume();
+    if (entry) {
+      entry.child = child;
+      entry.status = 'running';
+      child.on('close', () => { entry.status = 'closed'; });
+    }
+
+    return sendJson(res, 200, { ok: true });
+  }
+
   if (pathname.startsWith('/api/')) {
     return sendJson(res, 404, { error: 'unknown endpoint', path: pathname });
   }
@@ -193,6 +401,6 @@ const server = createServer(async (req, res) => {
   return serveStatic(req, res, pathname);
 });
 
-server.listen(PORT, () => {
-  console.log(`[workflow-viewer] serving on http://localhost:${PORT}`);
+server.listen(PORT, '127.0.0.1', () => {
+  console.log(`[workflow-viewer] serving on http://127.0.0.1:${PORT}`);
 });

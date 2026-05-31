@@ -19,24 +19,38 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 0 | 0% |
-| Sub-phase đóng | 3 (F-I/F-II/F-III) | 0 | 0% |
-| Server endpoint F | 3 (`/api/run`, `/api/events` SSE, `/api/decision`) | 0 | 0% |
+| Sessions hoàn thành | 6 | 2 | 33% |
+| Sub-phase đóng | 3 (F-I/F-II/F-III) | 1 (F-I) | 33% |
+| Server endpoint F | 3 (`/api/run`, `/api/events` SSE, `/api/decision`) | 3 | 100% |
 | Done-gate F (HQ mock: live log + highlight → gate → approve → terminal; + reject/đổi nhánh) | pass | — | — |
-| `git diff engine/` rỗng mọi session | luôn | — | — |
+| `git diff engine/` rỗng mọi session | luôn | ✓ F.1·F.2 | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: F (App II — live log + run control + duyệt) — **CHƯA bắt đầu** (PLAN vừa soạn 2026-05-31, chờ user duyệt mở session F.1).
-- **Session kế tiếp**: **F.1** — `POST /api/run` (spawn `run.ps1 run -Mock`) + run registry + latest.json discovery (race-safe).
-- **Blocker**: — (Phase E DONE; engine surface D sẵn; `server.mjs` nền E sẵn).
-- **Reference**: `PLAN.md` Phase F → Session F.1.
+- **Phase**: F — **Session F.2 DONE** (2026-05-31). Sub-phase F-I (server backend) ĐÓNG. 3 endpoint F đủ.
+- **Session kế tiếp**: **F.3** — EventSource client + live log panel (full output per node) trên `app/src/`.
+- **Blocker**: — (SSE tail + decision verified end-to-end qua mock: hello full chain + approval-demo awaiting→approve→terminal).
+- **Reference**: `PLAN.md` Phase F → Session F.3.
 
 ---
 
 ## Per-session log
+
+### 2026-05-31 — Session F.2 (GET /api/events SSE + POST /api/decision)
+- **Done**: 2 endpoint additive vào `server.mjs` (E + F.1 bất biến, dependency-free). (1) **`GET /api/events?project=&run=`** — SSE `text/event-stream`: tail `<run>/events.ndjson` theo **byte-offset** (đọc qua `fs.open`+`read` mỗi 300ms), decode-tới-newline-cuối (multibyte UTF-8 không vỡ ở ranh giới tick — `pending` Buffer giữ phần dư), đẩy mỗi dòng NDJSON `data: <line>`; parse `.type==='run_end'` → gửi `event: end` + `res.end()`; heartbeat `: ping` 15s; `req.on('close')` clear timers. (2) **`POST /api/decision {project,run,decision}`** — spawn `run.ps1 resume <p> -Decision <label> [-Mock]` (mock-mode lấy từ run registry, default mock nếu entry mất) → resume ghi tiếp CÙNG `events.ndjson` → SSE đang mở tự đọc byte mới. Guard: `SAFE_PROJECT` cho project+run, decision label regex `^[A-Za-z0-9_-]+$` (chặn command-injection).
+- **Output**: `app/server.mjs` (+import `open`; SSE handler + decision handler).
+- **Gate**: ✅ **hello mock**: SSE full chain `run_start`→`node_start`/`node_output`(**output nội dung thật** `[MOCK:echo-a]\nping`, không "(N chars)")/`node_done`→`run_end`(done)→`event: end`, đóng sạch. ✅ **approval-demo mock**: SSE giữ mở tại `awaiting` (seq5, KHÔNG run_end) → `POST /api/decision approve` → CÙNG stream chảy tiếp `resumed`→run_start(resume:true)→builder→`run_end`(terminal=builder,done)→`event: end` (**resume nối-tiếp-cùng-run-dir** verified, seq 6→11 cùng file). ✅ Validation: missing param→400 · bad project (`../etc`)→400 · missing decision→400 · bad label (`a b;rm`)→400. ✅ **`git diff engine/` RỖNG**.
+- **Next**: Session F.3 — EventSource client + `RunLog` panel (full output, auto-scroll) + nút Run (mock).
+- **Notes**: ⚠️ **Hạ tầng quan trọng — node-spawn pwsh**: `/snap/bin/pwsh` bị **SIGABRT** khi spawn từ Node (`code=null`, no output); `pwsh` trên PATH chạy OK (`code=0`, "OK"). Server **PHẢI dùng default `PWSH='pwsh'`** (KHÔNG override `PWSH=/snap/bin/pwsh`). Chạy server: `cd app && PORT=5188 node server.mjs` (run_in_background + `dangerouslyDisableSandbox`). Đây là điểm khác với chạy pwsh tay (tay dùng `/snap/bin/pwsh` được). Verify ở F.3+ phải nhớ.
+
+### 2026-05-31 — Session F.1 (POST /api/run)
+- **Done**: Thêm `POST /api/run` vào `server.mjs` (additive — E endpoints bất biến). Run registry `Map<runId→{child,project,runDir,mockMode,status,startedAt}>`. `snapshotLatestRun` + `pollForNewRunDir` race-safe (poll 200ms, timeout 10s, so sánh `latest.json .run`). Default request `"run"` khi omit (engine require non-empty). `child.stdout/stderr.resume()` drain để không block pipe. Server bind `127.0.0.1`. `git diff engine/` = rỗng.
+- **Output**: `app/server.mjs` — `POST /api/run` + helper functions.
+- **Gate**: ✅ hello (with request) → `{runId,runDir}` + `events.ndjson` EXISTS ✓ | approval-demo (no request) → discovery OK ✓ | project lạ → 404 ✓ | `git diff engine/` rỗng ✓
+- **Next**: Session F.2 — `GET /api/events` SSE + `POST /api/decision`.
+- **Notes**: Engine từ chối empty request string → server default `"run"`. STOP gate plan viết không có request cho approval-demo — thực tế engine cần; fixed bằng default. Shape `awaiting` event cần verify ở F.2 (xem approval-demo `events.ndjson`).
 
 ### 2026-05-31 — Session F.0 (soạn plan)
 - **Done**: Đọc ROADMAP §Phase F + 3 §Bàn-giao (D→E/F, E→F/G) + `server.mjs` (E) + `events.ps1` + surface `run.ps1 run/resume/status`. Chốt F-D1..F-D4 với user (poll latest.json / mock-default+Real-confirm / scope chỉ `run` / SSE dependency-free). Soạn `PLAN.md` (3 sub-phase / 6 session) + CHECKPOINT này.
@@ -49,7 +63,7 @@
 
 ## Ghi chú kỹ thuật tích luỹ (cập nhật khi phát hiện)
 
-- **Shape event `awaiting`** (xác nhận tại F.2, ghi vào đây): _(chưa xác nhận — chạy `approval-demo` đọc `events.ndjson`)_. Cần để F.5 dựng panel duyệt đúng (`prompt`/`choices[]` nested hay top-level).
+- **Shape event `awaiting`** (✅ xác nhận F.2 — chạy `approval-demo` đọc `events.ndjson`): **TOP-LEVEL, KHÔNG nested**. Ví dụ thật: `{"seq":5,"type":"awaiting","node":"gate","prompt":"Duyệt plan trước khi builder chạy?","choices":["approve"],"step":2}`. → `node` (string id), `prompt` (string), `choices` (mảng phẳng các nhãn `when`, vd `["approve"]`), `step` (int). F.5 approval UI đọc thẳng `evt.node`/`evt.prompt`/`evt.choices`. `resumed` event shape: `{type:"resumed", node, decision, cursor}`. Resume cũng phát thêm 1 `run_start` (resume:true) sau `resumed` — client nên bỏ qua run_start thứ 2 hoặc coi như mốc tiếp tục.
 - **latest.json format**: con trỏ `<project>/.runs/latest.json` (status.ps1 `Get-LatestRun` ưu tiên). Snapshot trước spawn để bắt run dir mới.
 - **Resume nối tiếp**: `resume -Decision` ghi tiếp CÙNG `events.ndjson` (seq theo số dòng). SSE giữ stream mở, đọc byte mới — KHÔNG mở run dir mới.
 - **Exit code run**: 0=done · 3=awaiting · ≠0=fail (nhưng server dựa event, không tin exit).
@@ -61,3 +75,4 @@
 | Date | Action | By |
 | --- | --- | --- |
 | 2026-05-31 | Created from `PLAN.md` | @planner |
+| 2026-05-31 | F.2 DONE — `GET /api/events` SSE (byte-offset tail, dependency-free) + `POST /api/decision` (resume nối-tiếp cùng run dir). Verified hello full chain + approval-demo awaiting→approve→terminal. `awaiting` shape = top-level. Engine diff RỖNG. Hạ tầng: node-spawn dùng PATH `pwsh` (snap pwsh SIGABRT) | @claude |
