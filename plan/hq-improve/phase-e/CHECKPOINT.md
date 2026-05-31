@@ -26,7 +26,7 @@
 | Sessions hoàn thành | 6 | 2 | 33% |
 | Scaffold app (Vite+React+Tailwind+ReactFlow+dagre) | 1 | 1 | 100% |
 | Data-layer (engine `-Json` + API projects/graph) | 1 | 1 | 100% |
-| Render graph (4 node + cạnh + nhãn + back-edge + dagre) | 1 | 0 | 0% |
+| Render graph (4 node + cạnh + nhãn + back-edge + dagre) | 1 | 1 | 100% |
 | Tương tác (zoom/pan/drag) | 1 | 0 | 0% |
 | Persist layout (`.layout.json` GET/POST, coordinate-free) | 1 | 0 | 0% |
 | Docs (README app · CLAUDE.md · ROADMAP E✅+D-1 revise+bàn-giao) | 1 | 0 | 0% |
@@ -36,11 +36,11 @@
 
 ## Đang ở đâu
 
-- **Phase**: E — App I: workflow viewer (#4). **E.1 + E.2 DONE** (2026-05-31). Làm trực tiếp trên `main` (KHÔNG worktree — worktree E.1 cũ đã mất, scaffold `app/` vẫn còn trên đĩa nên tái dùng).
-- **Session kế tiếp**: **E.3** — React Flow render: `GraphView` fetch `/api/graph?project=` → map React Flow nodes/edges; custom node 4-loại (worker rect / router diamond / **approval hexagon ⏸** / terminal no-out) + nhãn `when` + back-edge phân biệt + **dagre** auto-layout (rankdir TB) + project picker từ `/api/projects`. Verify `hq` 11 node/17 cạnh đúng topo + `approval-demo` hexagon. App-only → `git diff engine/` PHẢI rỗng (đừng đụng engine).
-- **Blocker**: — (data-layer E.2 đã sẵn: `/api/projects` + `/api/graph?project=` chạy thật).
-- **Reference**: `PLAN.md` Phase E → Session E.3.
-- **⚠️ Carry hạ tầng**: pwsh `/snap/bin/pwsh` core-dump teardown (đọc output, không tin exit code) · `workflow.json` = UTF-16 (dùng engine `-Json`, không JS-parse) · file `engine/*.ps1` có thể UTF-16 (dùng pwsh/`iconv` để soi nếu `grep` trả rỗng).
+- **Phase**: E — App I: workflow viewer (#4). **E.1 + E.2 + E.3 DONE** (2026-05-31). Làm trực tiếp trên `main`.
+- **Session kế tiếp**: **E.4** — Tương tác: zoom/pan/drag node mượt + Controls + MiniMap + Background. React Flow built-in (`<Controls>`, `<MiniMap>`, `<Background>`) đã gắn trong E.3; session này tập trung verify drag không reset layout, fitView hoạt động, minimap phản ánh viewport. App-only → `git diff engine/` PHẢI rỗng.
+- **Blocker**: — (E.3 đã ship GraphView + 4-loại node + dagre + project picker).
+- **Reference**: `PLAN.md` Phase E → Session E.4.
+- **⚠️ Carry hạ tầng**: pwsh `/snap/bin/pwsh` core-dump teardown (đọc output, không tin exit code) · `workflow.json` = UTF-16 (dùng engine `-Json`, không JS-parse).
 
 ---
 
@@ -68,6 +68,13 @@
 - **Next**: Session E.3 — React Flow render + dagre + project picker.
 - **Notes**: ⚠️ Đầu session phát hiện worktree `phase-e-1-scaffold` (E.1) đã mất — NHƯNG `app/` scaffold vẫn còn trên đĩa (untracked, gitignore nuốt node_modules/dist nên git tưởng mất). E.1 thực chất còn nguyên + server health re-verify PASS → KHÔNG re-scaffold, chỉ làm tiếp E.2 trên `main`. Patch engine dùng Python (giữ BOM `utf-8-sig` + CRLF) với anchor-count guard (abort nếu ≠1) thay vì Edit tool để an toàn encoding. `pwsh` qua `/bin/bash --noprofile --norc` (profile zsh gây nhiễu) — đọc output file, không tin exit code.
 
+### 2026-05-31 — Session E.3 — React Flow render: node 4-loại + dagre + project picker
+- **Done**: (1) **`app/src/layout.js`** — `applyDagreLayout(nodes, edges)`: dagre TB layout (ranksep=80, nodesep=44) → set positions + detect back-edges (source.y > target.y = đi ngược chiều layout). (2) **`app/src/nodes.jsx`** — 4 custom node types: `WorkerNode` (rect, blue left-border) / `RouterNode` (diamond via clip-path, amber) / `ApprovalNode` (hexagon via clip-path, violet, ⏸) / `TerminalNode` (green/red border based on id pattern). Export `nodeTypes` map. (3) **`app/src/GraphView.jsx`** — fetch `/api/graph?project=` → `toReactFlow()` (engine type `'work'` → worker/terminal by topology; `router`/`approval` by type) → `applyDagreLayout` → `styleBackEdges` (back-edge = orange dashed bezier) → `ReactFlow` với Controls+MiniMap+Background + metadata strip + legend. (4) **`app/src/App.jsx`** — project picker (dropdown từ `/api/projects`, default `hq`) + `ReactFlowProvider` wrapper. (5) `vite.config.js` += `optimizeDeps: {include: ['dagre']}` (CJS dep).
+- **Output**: `app/src/{layout.js,nodes.jsx,GraphView.jsx}` (new) + `App.jsx` + `vite.config.js` (updated).
+- **Gate**: `npm run build` pass (486 modules, 427KB JS, 24KB CSS) · server `/api/health`+`/api/projects` (18 proj, all 5 required present)+`/api/graph?project=hq` (11n/17e/entry=coo) · `approval-demo` gate→approval ntype → ApprovalNode hexagon · dagre smoke test (back-edge `router→worker1` detected, PASS) · `git diff engine/` = EMPTY. ⚠️ Visual verify không thực hiện được (browser extension không kết nối) — cần user verify khi chạy `npm run dev`.
+- **Next**: Session E.4 — tương tác zoom/pan/drag mượt (React Flow built-in đã gắn trong GraphView, cần verify behavior).
+- **Notes**: Engine trả `type: 'work'` (không phải `'worker'`), nhưng `toReactFlow` phân loại bằng topology (has outgoing edges?) nên không bị ảnh hưởng. `FitOnLoad` helper dùng `useReactFlow` hook + setTimeout 80ms để React Flow đo node dimensions trước khi fitView. Dagre multigraph mode cần edge ID unique (dùng `e.id`).
+
 ---
 
 ## Lịch sử revision
@@ -76,3 +83,4 @@
 | --- | --- | --- |
 | 2026-05-31 | Created from `PLAN.md` (3 sub-phase / 6 session). Chốt stack React+Vite+Tailwind+ReactFlow+dagre (REVISE D-1) + persist `.layout.json`+server-POST (user 2026-05-31) | @claude |
 | 2026-05-31 | E.2 DONE — engine `graph -Json` additive + server `/api/projects`+`/api/graph`; selftest 12/12; engine diff = chỉ run.ps1 | @claude |
+| 2026-05-31 | E.3 DONE — React Flow render 4-loại node + dagre + project picker; engine diff = EMPTY | @claude |

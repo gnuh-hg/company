@@ -17,6 +17,9 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['dagre'],
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

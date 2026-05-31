@@ -1,25 +1,73 @@
 import { useEffect, useState } from 'react';
+import { ReactFlowProvider } from '@xyflow/react';
+import GraphView from './GraphView.jsx';
 
-// E.1 scaffold placeholder. The interactive graph (React Flow + dagre) lands in
-// E.3; for now this just confirms the front-end ↔ server data-layer wiring by
-// pinging /api/health.
 export default function App() {
-  const [health, setHealth] = useState('checking…');
+  const [projects, setProjects] = useState([]);
+  const [selected, setSelected] = useState('');
+  const [loadErr, setLoadErr] = useState(null);
 
   useEffect(() => {
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((d) => setHealth(d.ok ? 'ok' : 'unexpected'))
-      .catch(() => setHealth('unreachable'));
+    fetch('/api/projects')
+      .then(r => r.json())
+      .then(list => {
+        setProjects(list);
+        // Default to 'hq' if present, else first entry
+        const def = list.find(p => p.name === 'hq') ?? list[0];
+        if (def) setSelected(def.name);
+      })
+      .catch(() => setLoadErr('Could not load project list.'));
   }, []);
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 bg-slate-50 text-slate-800">
-      <h1 className="text-2xl font-semibold">Workflow Viewer</h1>
-      <p className="text-sm text-slate-500">company/ engine — Phase E scaffold</p>
-      <p className="text-sm">
-        server: <span className="font-mono">{health}</span>
-      </p>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f8fafc' }}>
+      {/* ── Header ── */}
+      <header style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '0 16px', height: 48,
+        background: '#fff', borderBottom: '1px solid #e2e8f0',
+        flexShrink: 0,
+      }}>
+        <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a', fontFamily: 'monospace' }}>
+          Workflow Viewer
+        </span>
+        <span style={{ color: '#cbd5e1', fontSize: 12 }}>company/</span>
+
+        {loadErr ? (
+          <span style={{ fontSize: 12, color: '#ef4444' }}>{loadErr}</span>
+        ) : (
+          <select
+            value={selected}
+            onChange={e => setSelected(e.target.value)}
+            style={{
+              marginLeft: 8,
+              padding: '4px 8px',
+              fontSize: 13,
+              fontFamily: 'monospace',
+              border: '1px solid #cbd5e1',
+              borderRadius: 6,
+              background: '#f8fafc',
+              color: '#334155',
+              cursor: 'pointer',
+            }}
+          >
+            {projects.length === 0 && <option value="">Loading…</option>}
+            {projects.map(p => (
+              <option key={p.name} value={p.name}>
+                {p.name}
+                {p.source !== 'hq' ? ` (${p.source})` : ''}
+              </option>
+            ))}
+          </select>
+        )}
+      </header>
+
+      {/* ── Graph area ── */}
+      <main style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <ReactFlowProvider>
+          <GraphView project={selected} />
+        </ReactFlowProvider>
+      </main>
     </div>
   );
 }
