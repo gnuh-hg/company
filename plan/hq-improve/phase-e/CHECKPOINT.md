@@ -23,12 +23,12 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 3 | 50% |
+| Sessions hoàn thành | 6 | 4 | 67% |
 | Scaffold app (Vite+React+Tailwind+ReactFlow+dagre) | 1 | 1 | 100% |
 | Data-layer (engine `-Json` + API projects/graph) | 1 | 1 | 100% |
 | Render graph (4 node + cạnh + nhãn + back-edge + dagre) | 1 | 1 | 100% |
 | Tương tác (zoom/pan/drag) | 1 | 1 | 100% |
-| Persist layout (`.layout.json` GET/POST, coordinate-free) | 1 | 0 | 0% |
+| Persist layout (`.layout.json` GET/POST, coordinate-free) | 1 | 1 | 100% |
 | Docs (README app · CLAUDE.md · ROADMAP E✅+D-1 revise+bàn-giao) | 1 | 0 | 0% |
 | User gate (đóng phase) | 1 | 0 | — |
 
@@ -36,10 +36,10 @@
 
 ## Đang ở đâu
 
-- **Phase**: E — App I: workflow viewer (#4). **E.1 + E.2 + E.3 + E.4 DONE** (2026-05-31). Làm trực tiếp trên `main`.
-- **Session kế tiếp**: **E.5** — Persist layout: `.layout.json` GET/POST + load-on-open + save-on-drag. Server thêm `GET/POST /api/layout?project=`. App: khi load → GET layout (dùng nếu có, else dagre); khi `onNodeDragStop` → debounce → POST. Kiểm `git diff hq/workflow.json`=RỖNG sau drag+save (bất biến #2).
-- **Blocker**: — (E.4 đã verify Controls/MiniMap/Background/drag wired đúng; build pass 486 modules).
-- **Reference**: `PLAN.md` Phase E → Session E.5.
+- **Phase**: E — App I: workflow viewer (#4). **E.1 + E.2 + E.3 + E.4 + E.5 DONE**. Làm trực tiếp trên `main`.
+- **Session kế tiếp**: **E.6** — Polish + docs + handoff + USER GATE. Scope: hiển thị metadata graph (entry/max_steps/#node/#edge đã có từ E.3); README mục "App — Workflow viewer"; cập nhật CLAUDE.md bảng file; ROADMAP E✅ + Revision D-1 + §Bàn-giao-E→F/G; user duyệt đóng phase.
+- **Blocker**: — (E.5 STOP gate PASS đầy đủ; build 486 modules; engine diff RỖNG; workflow.json bất biến).
+- **Reference**: `PLAN.md` Phase E → Session E.6.
 - **⚠️ Carry hạ tầng**: pwsh `/snap/bin/pwsh` core-dump teardown (đọc output, không tin exit code) · `workflow.json` = UTF-16 (dùng engine `-Json`, không JS-parse).
 
 ---
@@ -92,3 +92,4 @@
 | 2026-05-31 | E.2 DONE — engine `graph -Json` additive + server `/api/projects`+`/api/graph`; selftest 12/12; engine diff = chỉ run.ps1 | @claude |
 | 2026-05-31 | E.3 DONE — React Flow render 4-loại node + dagre + project picker; engine diff = EMPTY | @claude |
 | 2026-05-31 | E.4 DONE — tương tác zoom/pan/drag; fix border rendering RouterNode+ApprovalNode (two-layer clip-path); bỏ fitView prop (FitOnLoad handles); build pass; engine diff = EMPTY | @claude |
+| 2026-05-31 | E.5 DONE — persist layout `.layout.json` GET/POST: server `resolveProjectDir`+path-guard+writeFile; app load layout song song với graph (saved positions override dagre), `onNodeDragStop` debounce 600ms → POST; build pass (486 modules); STOP gate 6/6 PASS; workflow.json RỖNG; engine diff RỖNG | @claude |

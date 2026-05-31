@@ -7,7 +7,7 @@
 // no cloud, no run-control/SSE (those belong to Phase F).
 
 import { createServer } from 'node:http';
-import { readFile, stat, readdir } from 'node:fs/promises';
+import { readFile, stat, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -64,6 +64,20 @@ async function listProjects() {
   return [...seen.entries()]
     .map(([name, source]) => ({ name, source }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Resolve the on-disk directory of a named project (precedence: projects > examples > hq).
+// Returns the absolute path, or null if the project doesn't exist / name is unsafe.
+async function resolveProjectDir(name) {
+  if (!SAFE_PROJECT.test(name)) return null;
+  if (name === 'hq') {
+    try { await stat(join(COMPANY, 'hq', 'workflow.json')); return join(COMPANY, 'hq'); } catch { return null; }
+  }
+  for (const base of ['projects', 'examples']) {
+    const dir = join(COMPANY, base, name);
+    try { await stat(join(dir, 'workflow.json')); return dir; } catch {}
+  }
+  return null;
 }
 
 // Shell `run.ps1 graph <proj> -Json` → normalized graph. The engine reads the
@@ -138,6 +152,38 @@ const server = createServer(async (req, res) => {
     const r = await getGraphJson(project);
     if (r.ok) return sendJson(res, 200, r.graph);
     return sendJson(res, r.status || 500, { error: r.error, stderr: r.stderr });
+  }
+
+  if (pathname === '/api/layout' && req.method === 'GET') {
+    const project = url.searchParams.get('project');
+    if (!project) return sendJson(res, 400, { error: 'missing project param' });
+    const dir = await resolveProjectDir(project);
+    if (!dir) return sendJson(res, 404, { error: 'project not found' });
+    try {
+      const content = await readFile(join(dir, '.layout.json'), 'utf-8');
+      return sendJson(res, 200, JSON.parse(content));
+    } catch {
+      return sendJson(res, 200, {}); // no layout yet
+    }
+  }
+
+  if (pathname === '/api/layout' && req.method === 'POST') {
+    const project = url.searchParams.get('project');
+    if (!project) return sendJson(res, 400, { error: 'missing project param' });
+    const dir = await resolveProjectDir(project);
+    if (!dir) return sendJson(res, 404, { error: 'project not found' });
+    let body = '';
+    try {
+      for await (const chunk of req) body += chunk;
+    } catch { return sendJson(res, 400, { error: 'failed reading body' }); }
+    let data;
+    try { data = JSON.parse(body); } catch { return sendJson(res, 400, { error: 'invalid JSON body' }); }
+    if (!data.positions || typeof data.positions !== 'object') {
+      return sendJson(res, 400, { error: 'body must have .positions object' });
+    }
+    const layout = { positions: data.positions, version: 1 };
+    await writeFile(join(dir, '.layout.json'), JSON.stringify(layout, null, 2), 'utf-8');
+    return sendJson(res, 200, { ok: true });
   }
 
   if (pathname.startsWith('/api/')) {

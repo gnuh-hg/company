@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -103,6 +103,11 @@ export default function GraphView({ project }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [ready, setReady] = useState(false);
 
+  // Refs for debounced layout save (always current values, no stale-closure risk)
+  const nodesRef = useRef([]);
+  const saveTimerRef = useRef(null);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+
   useEffect(() => {
     if (!project) {
       setNodes([]);
@@ -116,16 +121,26 @@ export default function GraphView({ project }) {
     setError(null);
     setReady(false);
 
-    fetch(`/api/graph?project=${encodeURIComponent(project)}`)
-      .then(r => {
+    Promise.all([
+      fetch(`/api/graph?project=${encodeURIComponent(project)}`).then(r => {
         if (!r.ok) return r.json().then(b => Promise.reject(b.error ?? r.statusText));
         return r.json();
-      })
-      .then(graph => {
+      }),
+      // Load saved layout; silently fall back to {} on any error
+      fetch(`/api/layout?project=${encodeURIComponent(project)}`).then(r => r.json()).catch(() => ({})),
+    ])
+      .then(([graph, layoutData]) => {
         const { rfNodes, rfEdges } = toReactFlow(graph);
         const { nodes: laid, backEdgeIds } = applyDagreLayout(rfNodes, rfEdges);
+
+        // Apply saved positions (override dagre) if the layout file exists
+        const saved = layoutData?.positions ?? {};
+        const finalNodes = Object.keys(saved).length > 0
+          ? laid.map(n => saved[n.id] ? { ...n, position: saved[n.id] } : n)
+          : laid;
+
         const styledEdges = styleBackEdges(rfEdges, backEdgeIds);
-        setNodes(laid);
+        setNodes(finalNodes);
         setEdges(styledEdges);
         setMeta({
           entry: graph.entry,
@@ -142,6 +157,22 @@ export default function GraphView({ project }) {
         setMeta(null);
       })
       .finally(() => setLoading(false));
+
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [project]);
+
+  // Debounced save: collect all node positions → POST /api/layout
+  const onNodeDragStop = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const positions = {};
+      nodesRef.current.forEach(n => { positions[n.id] = n.position; });
+      fetch(`/api/layout?project=${encodeURIComponent(project)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positions }),
+      }).catch(() => {}); // fire-and-forget, non-critical
+    }, 600);
   }, [project]);
 
   if (!project) {
@@ -192,6 +223,7 @@ export default function GraphView({ project }) {
         panOnDrag
         zoomOnScroll
         nodesDraggable
+        onNodeDragStop={onNodeDragStop}
       >
         <FitOnLoad ready={ready} />
         <Background color="#e2e8f0" gap={20} />
