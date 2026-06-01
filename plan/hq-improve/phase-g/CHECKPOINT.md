@@ -25,10 +25,10 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 1 | 17% |
-| Sub-phase đóng | 3 (G-I/G-II/G-III) | 0 | 0% |
+| Sessions hoàn thành | 6 | 2 | 33% |
+| Sub-phase đóng | 3 (G-I/G-II/G-III) | 0 (G-I 2/2 ✅) | 0% |
 | Engine `save-graph` (additive) | 1 lệnh + fixture `edit-demo` | ✅ G.1 DONE | 100% |
-| Server `POST /api/workflow` | validate-gated, reject-on-invalid | — | — |
+| Server `POST /api/workflow` | validate-gated, reject-on-invalid | ✅ G.2 DONE | 100% |
 | Edit UI (cạnh + node + graph-level) | full structural | — | — |
 | Coordinate-free verified | `git diff workflow.json` ZERO toạ độ | — | — |
 | Done-gate Phase G (user duyệt) | pass | — | — |
@@ -38,10 +38,11 @@
 ## Đang ở đâu
 
 - **Phase**: G (App III — in-app edit; **tuỳ chọn — user chốt LÀM** 2026-06-01 vì gap CLI edit không phủ graph-format)
-- **Session kế tiếp**: **G.2 — Server `POST /api/workflow` (shell save-graph, reject UX)**
-- **Blocker**: — (G.1 DONE; `engine/save.ps1` + `run.ps1 save-graph` + `examples/edit-demo/` sẵn)
-- **Reference**: `PLAN.md` Phase G → Session G.2 · ROADMAP §Phase G
-- **Nhắc G.2**: `POST /api/workflow?project=<p>` body `{nodes,edges,entry,max_steps}` → strip coords server-side → ghi temp file → shell `pwsh -NoProfile -File run.ps1 save-graph <p> <tmpfile>` → **parse stdout** `{ok,errors[]}` (KHÔNG tin exit code) → ok:true⇒200; ok:false⇒422+errors[]. Reuse `SAFE_PROJECT`+`resolveProjectDir` (E/F sẵn). Dọn temp. Bind `127.0.0.1`. Dependency-free (Node core).
+- **Session kế tiếp**: **G.3 — Edit-mode: nối/xoá cạnh + sửa nhãn `when` + nút Save (frontend)**
+- **Blocker**: — (G.2 DONE; `POST /api/workflow` sẵn trên `server.mjs`, validate-gated, reject-on-invalid, coord-strip)
+- **Reference**: `PLAN.md` Phase G → Session G.3 · ROADMAP §Phase G
+- **Nhắc G.3** (frontend `app/src/`, KHÔNG đụng engine): edit-mode toggle (tách view/run E/F) → React Flow `onConnect`/`onEdgesDelete` + sửa nhãn `when` (pending-state cục bộ) → nút "Save graph" gom semantic graph (nodes/edges/entry/max_steps — KHÔNG toạ độ) `POST /api/workflow?project=` → 200 toast+re-fetch `GET /api/graph`; 422 → panel `errors[]`. Discard = reload-from-server. Cảnh báo unsaved khi đổi project/rời. `git diff engine/` PHẢI rỗng.
+- **⚠️ Test harness note (sandbox lồng)**: server spawn pwsh — wrapper `/snap/bin/pwsh` bị **SIGABRT** khi là grandchild node trong sandbox này; dùng binary thật `PWSH=/snap/powershell/current/opt/powershell/pwsh` để test. Long-running bg node bị SIGSTKFLT (exit 144) → chạy server+curl+kill **trong 1 bash call** (`run_in_background:true` cũng chết). Runtime thật của user (`pwsh` PATH, server ngoài sandbox) chạy bình thường — đây chỉ là artifact test.
 
 ---
 
@@ -54,6 +55,19 @@
 ---
 
 ## Per-session log
+
+### 2026-06-01 — Session G.2 — Server `POST /api/workflow`
+- **Done**: Thêm endpoint `POST /api/workflow?project=<p>` vào `app/server.mjs` (additive, dependency-free): body `{nodes,edges,entry,max_steps}` → `stripCandidate` (COORD_KEYS server-side strip, defense lớp 1) → `saveGraphViaEngine` ghi temp ra `os.tmpdir()` → shell `run.ps1 save-graph <p> <tmpfile>` (cwd ENGINE_DIR) → **parse stdout** (last `{...}`, KHÔNG tin exit code) → cleanup temp → ok⇒200 `{ok:true}` · !ok⇒**422** `{ok:false,errors[]}`. Reuse `SAFE_PROJECT`+`resolveProjectDir` (project lạ→404, body hỏng→400, KHÔNG spawn). Imports thêm: `unlink` (fs/promises), `tmpdir` (node:os).
+- **STOP gate verified** (server `PWSH=real-binary PORT=5181`, all in 1 bash call):
+  - CASE 1 valid graph (có x/y) → **200** `{ok:true}`; `grep -c '"x"' workflow.json`=**0** (strip 2-lớp OK); `git diff edit-demo/workflow.json` rỗng (idempotent re-save).
+  - CASE 2 invalid (router 2 cạnh thiếu `when`) → **422** + `errors[]` (2 lỗi máy-đọc-được); `workflow.json` SHA256 **BẤT BIẾN** (reject-on-invalid, restore đúng).
+  - CASE 3 project lạ (`?project=nope`) → **404**, KHÔNG spawn/ghi.
+  - CASE 4 body không-JSON → **400**.
+  - Round-trip `GET /api/graph?project=edit-demo` phản ánh trạng thái committed.
+  - `git diff engine/` = **RỖNG** (app-only); chỉ `app/server.mjs` thay đổi; `edit-demo` committed sạch.
+- **Output**: `app/server.mjs` (`POST /api/workflow` + `stripCandidate` + `saveGraphViaEngine`).
+- **Next**: Session G.3 — Edit-mode cạnh + when-label + nút Save (frontend).
+- **Notes**: Sandbox lồng giết snap-wrapper pwsh (SIGABRT) + bg node sống lâu (SIGSTKFLT exit 144) — workaround test = real-binary pwsh + server+curl+kill 1-call (xem "⚠️ Test harness note"). Code endpoint mirror pattern `getGraphJson` (E/F proven). Parse last `{...}` thay vì first để bỏ qua text help/info phía trước.
 
 ### 2026-06-01 — Session G.1 — Engine `save-graph`
 - **Done**: `engine/save.ps1` (`Strip-GraphCoordinates` + `Save-Graph` backup→strip→write→validate→commit-or-restore + `Write-SaveResult` JSON stdout) + `run.ps1 save-graph` dispatch (allowlist, help, switch case) + fixture `examples/edit-demo/` (3-node graph: writer→checker(router)→publisher + revise back-edge, 3 agent stubs).

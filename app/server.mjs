@@ -6,14 +6,16 @@
 // Phase E endpoints: GET /api/health · /api/projects · /api/graph · GET/POST /api/layout
 // Phase F endpoints (F.1): POST /api/run (spawn run.ps1, race-safe discovery)
 //                  (F.2): GET /api/events (SSE tail) · POST /api/decision (resume)
+// Phase G endpoint (G.2): POST /api/workflow (shell save-graph, validate-gated, reject-on-invalid)
 
 import { createServer } from 'node:http';
-import { readFile, stat, readdir, writeFile, open } from 'node:fs/promises';
+import { readFile, stat, readdir, writeFile, open, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, normalize, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = join(__dirname, 'dist');
@@ -157,6 +159,77 @@ function getGraphJson(project) {
       }
       try { res({ ok: true, graph: JSON.parse(out.slice(start, end + 1)) }); }
       catch (e) { res({ ok: false, status: 502, error: `bad JSON from engine: ${e.message}` }); }
+    });
+  });
+}
+
+// React Flow / layout keys that must never leak into workflow.json (bất biến #2).
+// Mirrors $script:CoordKeys in engine/save.ps1 — defense-in-depth (engine strips too).
+const COORD_KEYS = new Set([
+  'x', 'y', 'position', 'positionAbsolute', 'width', 'height',
+  'measured', 'dragging', 'selected', 'selectable',
+]);
+
+// Build a semantic-only candidate from an edit body: keep {name?,entry,max_steps,edges}
+// verbatim, strip coordinate/layout keys from every node. Server-side strip is the
+// first of two layers; save-graph strips again before writing.
+function stripCandidate(body) {
+  const out = {};
+  if (typeof body.name === 'string') out.name = body.name;
+  if (body.entry !== undefined) out.entry = body.entry;
+  if (body.max_steps !== undefined) out.max_steps = body.max_steps;
+  out.nodes = Array.isArray(body.nodes)
+    ? body.nodes.map((n) => {
+        const node = {};
+        for (const [k, v] of Object.entries(n || {})) {
+          if (!COORD_KEYS.has(k)) node[k] = v;
+        }
+        return node;
+      })
+    : [];
+  out.edges = Array.isArray(body.edges) ? body.edges : [];
+  return out;
+}
+
+// Shell `run.ps1 save-graph <proj> <tmpfile>` and parse the {"ok",errors[]} line it
+// prints to stdout. Trust the stdout CONTENT, not the exit code — pwsh can core-dump
+// (RC=134) on teardown. Writes the candidate to an OS-temp file and removes it after.
+function saveGraphViaEngine(project, candidate) {
+  return new Promise(async (res) => {
+    if (!SAFE_PROJECT.test(project)) {
+      return res({ ok: false, status: 400, error: 'invalid project name' });
+    }
+    const tmpPath = join(tmpdir(), `wf-candidate-${process.pid}-${Date.now()}.json`);
+    try {
+      await writeFile(tmpPath, JSON.stringify(candidate, null, 2), 'utf-8');
+    } catch (e) {
+      return res({ ok: false, status: 500, error: `cannot write candidate: ${e.message}` });
+    }
+    const cleanup = async () => { try { await unlink(tmpPath); } catch {} };
+
+    let child;
+    try {
+      child = spawn(PWSH, ['-NoProfile', '-File', ENGINE_RUN, 'save-graph', project, tmpPath], { cwd: ENGINE_DIR });
+    } catch (e) {
+      await cleanup();
+      return res({ ok: false, status: 500, error: `cannot spawn ${PWSH}: ${e.message}` });
+    }
+    let out = '', err = '';
+    child.stdout.on('data', (d) => { out += d; });
+    child.stderr.on('data', (d) => { err += d; });
+    child.on('error', async (e) => { await cleanup(); res({ ok: false, status: 500, error: e.message }); });
+    child.on('close', async () => {
+      await cleanup();
+      // The result line is the LAST {...} on stdout (help/info text may precede it).
+      const end = out.lastIndexOf('}');
+      const start = out.lastIndexOf('{', end);
+      if (start === -1 || end < start) {
+        return res({ ok: false, status: 502, error: 'engine produced no result JSON', stderr: err.trim() });
+      }
+      let parsed;
+      try { parsed = JSON.parse(out.slice(start, end + 1)); }
+      catch (e) { return res({ ok: false, status: 502, error: `bad JSON from engine: ${e.message}` }); }
+      res({ ok: true, result: parsed });
     });
   });
 }
@@ -438,6 +511,34 @@ const server = createServer(async (req, res) => {
     }
 
     return sendJson(res, 200, { ok: true });
+  }
+
+  // POST /api/workflow?project=<p> — save an edited graph, validate-gated.
+  // Body: {nodes, edges, entry, max_steps} (semantic-only; coords stripped server-side).
+  // Shells run.ps1 save-graph → engine writes+validates atomically:
+  //   ok:true  → 200 {ok:true}            (workflow.json committed)
+  //   ok:false → 422 {ok:false, errors[]} (file restored, never persisted invalid)
+  if (pathname === '/api/workflow' && req.method === 'POST') {
+    const project = url.searchParams.get('project');
+    if (!project) return sendJson(res, 400, { error: 'missing project param' });
+    if (!SAFE_PROJECT.test(project)) return sendJson(res, 400, { error: 'invalid project name' });
+    const projectDir = await resolveProjectDir(project);
+    if (!projectDir) return sendJson(res, 404, { error: 'project not found' });
+
+    let body = '';
+    try { for await (const chunk of req) body += chunk; }
+    catch { return sendJson(res, 400, { error: 'failed reading body' }); }
+    let data;
+    try { data = JSON.parse(body); } catch { return sendJson(res, 400, { error: 'invalid JSON body' }); }
+    if (typeof data !== 'object' || data === null) {
+      return sendJson(res, 400, { error: 'body must be a graph object' });
+    }
+
+    const candidate = stripCandidate(data);
+    const r = await saveGraphViaEngine(project, candidate);
+    if (!r.ok) return sendJson(res, r.status || 500, { error: r.error, stderr: r.stderr });
+    if (r.result.ok) return sendJson(res, 200, { ok: true });
+    return sendJson(res, 422, { ok: false, errors: r.result.errors || [] });
   }
 
   if (pathname.startsWith('/api/')) {
