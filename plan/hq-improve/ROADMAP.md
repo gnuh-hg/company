@@ -87,11 +87,10 @@ Bốn vấn đề user nêu + thực trạng đã soi trong code:
 - **Phụ thuộc:** Phase D (HITL + event) + Phase E (app shell + graph).
 - **Done-gate:** từ app chạy 1 HQ build (mock) → thấy log live đầy đủ output + node sáng dần trên graph → tới gate duyệt → bấm approve → chạy tới terminal; thử 1 lần reject/đổi nhãn đi nhánh khác đúng.
 
-### Phase G — App III (tuỳ chọn, sau cùng): in-app edit
-- **Mục tiêu:** sửa workflow ngay trong app (kéo nối cạnh, sửa node) — chỉ làm nếu CLI `edit` không đủ.
-- **Lưu ý (user):** "sửa thì nếu phức tạp cho bằng lệnh là được". Ưu tiên giữ edit ở CLI `edit` TUI; chỉ thêm vào app nếu rẻ. Để cuối, không chặn các phase trước.
-- **Phụ thuộc:** Phase E.
-- **Done-gate:** (định nghĩa khi tới — nếu làm) thêm/xoá node + nối cạnh trong app → ghi `workflow.json` hợp lệ (`validate` pass), vẫn coordinate-free.
+### Phase G — App III (tuỳ chọn, sau cùng): in-app edit ✅ DONE
+- **Mục tiêu:** sửa cấu trúc graph ngay trong app — lấp gap CLI `edit` (pipeline-v1 only) không phủ graph-format (`hq`/`loopy`/`branchy`/`approval-demo`).
+- **Done-gate đạt (2026-06-01):** app edit-mode → add node + nối cạnh → Save → validate pass + coord-free (ZERO `x/y`); invalid → reject + errors[]; `git diff hq/workflow.json` = RỖNG; regression xanh; pipeline-v1 → grayed Edit. User duyệt.
+- **Phụ thuộc:** Phase E. **Đóng đợt hq-improve.**
 
 ---
 
@@ -123,7 +122,7 @@ A đi đầu (de-risk). B + C dựa A; D dựa C (engine sạch rồi mới thê
 | D — Engine HITL + event stream (#3) | `plan/hq-improve/phase-d/` | ✅ DONE (7/7 session, user duyệt 2026-05-30) — `engine/events.ps1` + `events.ndjson` 7 loại event full-output · node `approval` (validate/viz hexagon ⏸) · executor pause→awaiting + `Resume-Workflow -Decision` · headless `-AutoApprove`+exit-3+`status` awaiting · `Test-DiffScope` CC-b (snapshot+whitelist `projects/`+`spec.json`+`.runs/`+`memory/`) · diff-violation→awaiting + `examples/approval-demo/` (selftest 11→12). Graph không-gate chạy y hệt (mock-path bất biến, selftest 12/12). ⚠️ real-run user-initiated phơi + vá false-positive diff-scope (engine tự quản `.runs/`/`memory/` thêm vào whitelist). Bàn giao E/F: xem §Bàn-giao-D→E/F |
 | E — App I: workflow viewer (#4) | `plan/hq-improve/phase-e/` | ✅ DONE (6/6 session, user duyệt 2026-05-31) — App web `company/app/` (React+Vite+Tailwind+React Flow+dagre). **REVISE D-1**: stack đổi sang React+Vite+Tailwind+React Flow+dagre (user chốt 2026-05-31; lý do: Phase F nặng + lib node-graph sẵn). E.1 scaffold · E.2 data-layer (`graph -Json` additive, selftest 12/12) · E.3 render 4-loại node+dagre+project picker · E.4 zoom/pan/drag (fix border two-layer) · E.5 persist `.layout.json` GET/POST (coordinate-free, `git diff workflow.json`=RỖNG) · E.6 polish (Reset layout) + docs. Engine diff = chỉ `run.ps1` (`-Json` additive). Bàn giao F: xem §Bàn-giao-E→F/G |
 | F — App II: live log + duyệt (#3) | `plan/hq-improve/phase-f/` | ✅ DONE (6/6 session, user duyệt 2026-06-01) — F.1 `POST /api/run`+latest.json discovery · F.2 SSE `/api/events`+`/api/decision` (byte-offset tail, resume nối tiếp cùng run dir) · F.3 `RunLog` panel full-output · F.4 highlight node live (running/done/awaiting, ring+badge+pulse) · F.5 `ApprovalPanel` (choices+diff_violation)+`RealConfirmDialog` · F.6 polish (loading state)+docs+ROADMAP. **Engine BẤT BIẾN** (`git diff engine/` rỗng mọi session). Mock-path bất biến; regression 12/12; server dependency-free; bind 127.0.0.1. §Bàn-giao-F→G: xem bên dưới |
-| G — App III: in-app edit (tuỳ chọn) | `plan/hq-improve/phase-g/` | 🟡 đang chạy (1/6 session). **G.1 ✅ DONE (2026-06-01)**: `engine/save.ps1` (`Save-Graph` backup→strip-coords→write→validate→commit-or-restore + `Write-SaveResult` JSON stdout) + `run.ps1 save-graph` + fixture `examples/edit-demo/` — STOP gate pass (valid→commit; bad→422+SHA-invar; x/y strip verified; regression 12/12; `git diff engine/` additive). Còn lại: G.2 server `POST /api/workflow` · G.3 edit cạnh · G.4 add/del node · G.5 coord-free · G.6 polish+gate |
+| G — App III: in-app edit (tuỳ chọn) | `plan/hq-improve/phase-g/` | ✅ DONE (6/6 session, user duyệt 2026-06-01) — G.1 `engine/save.ps1` (`Save-Graph` write→validate→commit-or-restore + `Strip-GraphCoordinates` + `Write-SaveResult`) + `run.ps1 save-graph` + fixture `examples/edit-demo/`. G.2 `POST /api/workflow` validate-gated + `GET /api/workflow` raw. G.3 edit-mode cạnh (connect/delete + when-label + Save/Discard). G.4 add/del node (cascade) + form field + entry/max_steps. G.5 coordinate-free verified (layout node mới → `.layout.json`, `grep '"x"'`=0). G.6 polish (pipeline-v1 grayed Edit + docs). **Engine BẤT BIẾN trừ `save-graph` additive** (`git diff engine/` chỉ `save.ps1`+dispatch). `git diff hq/workflow.json`=RỖNG. Regression validate/run/selftest xanh. **Đợt hq-improve ĐÓNG.** |
 
 ---
 
@@ -223,6 +222,21 @@ A đi đầu (de-risk). B + C dựa A; D dựa C (engine sạch rồi mới thê
 | **autobuild/autofix từ app** | Scope chỉ `run` (F-D3) | (tuỳ chọn) thêm nút chạy `autobuild`/`autofix` real từ app (sandbox/promote/diff-scope) — sau G |
 
 **Server endpoint sau F** (đầy đủ): `GET /api/health` · `GET /api/projects` · `GET /api/graph?project=` · `GET/POST /api/layout?project=` (E) + `POST /api/run` · `GET /api/events?project=&run=` (SSE) · `POST /api/decision` (F). G (nếu làm) thêm: `POST /api/workflow?project=` (ghi `workflow.json` đã validate).
+
+---
+
+## Bàn giao G→(ngoài đợt) — đợt hq-improve ĐÓNG
+
+> Phase G *đóng in-app edit* và **kết thúc toàn bộ đợt hq-improve (A→G)**. Phần dưới = hạng mục **ngoài đợt**, chỉ làm nếu user cần sau.
+
+| Hạng mục | G làm gì | Ngoài đợt (nếu cần) |
+| --- | --- | --- |
+| **In-app edit graph** | ✅ Full structural (add/del node + form field + nối/xoá cạnh + when-label + entry/max_steps) → `save-graph` validate-gated, coordinate-free | (đóng ở G) |
+| **autobuild/autofix từ app** | Vẫn defer (F-D3 + G out-of-scope) | Nút chạy `autobuild`/`autofix` real từ app (sandbox/promote/diff-scope) |
+| **Pipeline-v1 edit trong app** | App chỉ-xem (grayed Edit) cho pipeline-v1; CLI `edit` phủ | Hợp nhất editor (graph + pipeline) trong app |
+| **Undo/redo nhiều bước** | Discard = reload-from-server (bỏ pending) | History stack multi-step undo/redo |
+
+**Server endpoint sau G** (đầy đủ): `GET /api/health` · `/api/projects` · `/api/graph?project=` · `GET/POST /api/layout?project=` (E) + `POST /api/run` · `GET /api/events` SSE · `POST /api/decision` (F) + `GET/POST /api/workflow?project=` (G). **Đợt hq-improve ĐÓNG.**
 
 ---
 

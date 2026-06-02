@@ -25,6 +25,12 @@ export default function App() {
   const [showRealConfirm, setShowRealConfirm] = useState(false);
   const [decisionPending, setDecisionPending] = useState(false);
 
+  // Edit mode state
+  const [editMode, setEditMode] = useState(false);
+  const [graphDirty, setGraphDirty] = useState(false);
+  // null = unknown (loading), 'graph' = editable, 'pipeline-v1' = view-only (CLI edit only)
+  const [graphFormat, setGraphFormat] = useState(null);
+
   useEffect(() => {
     fetch('/api/projects')
       .then(r => r.json())
@@ -193,7 +199,14 @@ export default function App() {
         ) : (
           <select
             value={selected}
-            onChange={e => { setSelected(e.target.value); handleClear(); }}
+            onChange={e => {
+              if (graphDirty && !window.confirm('You have unsaved graph changes. Discard and switch project?')) return;
+              setSelected(e.target.value);
+              setGraphDirty(false);
+              setEditMode(false);
+              setGraphFormat(null);
+              handleClear();
+            }}
             style={{
               marginLeft: 8,
               padding: '4px 8px',
@@ -281,6 +294,38 @@ export default function App() {
           Real
         </label>
 
+        {/* Edit mode toggle — disabled for pipeline-v1 (use CLI `edit`) */}
+        <button
+          onClick={() => { if (graphFormat !== 'pipeline-v1') setEditMode(m => !m); }}
+          disabled={runStatus === 'running' || graphFormat === 'pipeline-v1'}
+          title={
+            graphFormat === 'pipeline-v1'
+              ? 'pipeline-v1 format: use CLI `./run.ps1 edit <proj>` to edit'
+              : editMode
+                ? 'Exit edit mode (view only)'
+                : 'Enter edit mode — add/delete nodes, connect/delete edges, edit fields, Save graph'
+          }
+          style={{
+            marginLeft: 8,
+            padding: '4px 12px', fontSize: 11, fontFamily: 'monospace', fontWeight: 700,
+            background: graphFormat === 'pipeline-v1'
+              ? '#f1f5f9'
+              : editMode ? (graphDirty ? '#fef3c7' : '#fffbeb') : 'rgba(255,255,255,0.9)',
+            color: graphFormat === 'pipeline-v1'
+              ? '#94a3b8'
+              : editMode ? '#92400e' : '#64748b',
+            border: graphFormat === 'pipeline-v1'
+              ? '1px solid #e2e8f0'
+              : editMode ? '1px solid #f59e0b' : '1px solid #cbd5e1',
+            borderRadius: 6,
+            cursor: (runStatus === 'running' || graphFormat === 'pipeline-v1') ? 'not-allowed' : 'pointer',
+            boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+            transition: 'all 0.15s',
+          }}
+        >
+          {graphFormat === 'pipeline-v1' ? '✎ Edit (v1)' : editMode ? '✎ Editing' : '✎ Edit'}
+        </button>
+
       </header>
 
       {/* ── Graph + Log ── */}
@@ -288,7 +333,13 @@ export default function App() {
         {/* Graph area: grows to fill remaining space */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }}>
           <ReactFlowProvider>
-            <GraphView project={selected} nodeStatuses={nodeStatuses} />
+            <GraphView
+              project={selected}
+              nodeStatuses={nodeStatuses}
+              editMode={editMode}
+              onDirtyChange={setGraphDirty}
+              onFormatDetected={setGraphFormat}
+            />
           </ReactFlowProvider>
         </div>
 

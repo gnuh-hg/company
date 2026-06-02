@@ -1,0 +1,65 @@
+{
+  "name": "counterfeit-detector",
+  "entry": "pm",
+  "max_steps": 20,
+  "roles": [
+    {
+      "id": "pm",
+      "role": "pm",
+      "input": "{{user_request}}",
+      "output_key": "product_scope"
+    },
+    {
+      "id": "ba",
+      "role": "ba",
+      "input": "{{product_scope}}",
+      "output_key": "biz_spec"
+    },
+    {
+      "id": "tech_lead",
+      "role": "tech-lead",
+      "input": "{{biz_spec}}",
+      "output_key": "tech_plan"
+    },
+    {
+      "id": "db",
+      "role": "db-architect",
+      "input": "{{tech_plan}}",
+      "output_key": "db_schema"
+    },
+    {
+      "id": "api",
+      "role": "api-developer",
+      "input": "{{db_schema}}\n{{tech_plan}}",
+      "output_key": "api_design"
+    },
+    {
+      "id": "frontend",
+      "role": "frontend-developer",
+      "input": "{{api_design}}\n{{result}}",
+      "output_key": "ui_code"
+    },
+    {
+      "id": "qa",
+      "role": "qa-functional",
+      "input": "{{ui_code}}\n{{api_design}}\n{{biz_spec}}",
+      "output_key": "qa_report"
+    }
+  ],
+  "patterns": [
+    { "name": "do-verify-loop", "prefix": "dv" }
+  ],
+  "edges": [
+    { "from": "pm",       "to": "ba" },
+    { "from": "ba",       "to": "tech_lead" },
+    { "from": "tech_lead","to": "db" },
+    { "from": "db",       "to": "api" },
+    { "from": "api",      "to": "dv_builder" },
+    { "from": "dv_done",  "to": "frontend" },
+    { "from": "frontend", "to": "qa" }
+  ],
+  "trial": [
+    { "observe": "result",    "expect": { "kind": "non-empty" } },
+    { "observe": "qa_report", "expect": { "kind": "non-empty" } }
+  ]
+}

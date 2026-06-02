@@ -85,7 +85,8 @@ HQ là một workflow có **router** → cần `-Router` để steer dry-run gat
 | **BUILD** | `build` | `build <spec-file> [<outName>]` | **Builder engine**: build-spec JSON → sinh chi nhánh (copy vai + stamp pattern + nối edge) |
 | | `autobuild` | `autobuild <proj> "<request>" [-Router s] [-Real] [-KeepSandbox]` | **Real-run harness HQ**: dry-run gate (free) → (`-Real`) sandbox → run thật → verify → promote |
 | | `autofix` | `autofix <proj> "<req>" -Seed <br> -Branch <n> [-Router s] [-Real]` | **Fix-loop harness**: seed branch hỏng → HQ patch → verify fail→pass → promote |
-| **AUTHOR** | `edit` | `edit <proj>` | TUI thêm/xoá/đổi thứ tự node, chọn agent, set input deps |
+| **AUTHOR** | `edit` | `edit <proj>` | TUI thêm/xoá/đổi thứ tự node, chọn agent, set input deps (pipeline-v1) |
+| | `save-graph` | `save-graph <proj> <candidate-file>` | Ghi + validate atomic (graph-format); PASS → commit; FAIL → restore + `{"ok":false,"errors":[]}` |
 | **Advanced** | `selftest` | `selftest [all]` | Chạy bộ test engine (3 script + 7 stamp + mem-demo); **exit = số mục fail** |
 
 Không arg / `help` / `-h` / `--help` → in help đầy đủ.
@@ -456,7 +457,7 @@ Node lặp được (loop) → state keyed theo **lượt thăm** (`seq`), khôn
 
 ---
 
-## App — Workflow viewer + live log + duyệt (Phase E + F)
+## App — Workflow viewer + live log + duyệt + in-app edit (Phase E + F + G)
 
 App web local (`company/app/`) xem graph workflow tương tác, chạy run từ UI, theo dõi log live, duyệt gate HITL.
 Stack: React + Vite + Tailwind + React Flow + dagre. Server Node `http` thuần (dependency-free), bind `localhost`.
@@ -494,27 +495,46 @@ node server.mjs      # → http://localhost:5179
 - **Approval gate UI**: khi engine dừng ở `awaiting` → panel duyệt hiện `prompt` + danh sách `choices[]`; bấm 1 nhãn → `POST /api/decision` → engine resume tiếp, SSE chảy tiếp (cùng run dir). Hỗ trợ approve / reject / đổi nhãn đi nhánh khác. `diff_violation` (builder đụng file ngoài vùng trắng) hiện danh sách `violations[]` trong panel trước khi duyệt.
 - **Real-run guard (F-D2)**: checkbox "Real" cạnh nút Run; bật + bấm Run → **dialog cảnh báo đốt token**; Cancel = không spawn. Mặc định Mock (không đốt token).
 
-> **Giới hạn**: App chỉ chạy `run` (HQ + project con, mock mặc định). `autobuild`/`autofix` (E2E real, sandbox/promote) dùng CLI. Sửa graph trong app → Phase G (tuỳ chọn).
+### Tính năng in-app edit (Phase G)
+
+Edit cấu trúc graph **ngay trong app** — chỉ cho project dạng **graph** (`nodes`/`edges`); project pipeline-v1 hiện nút grayed-out "✎ Edit (v1)" → dùng CLI `run.ps1 edit` thay.
+
+- **Bật edit mode**: nút **✎ Edit** (góc phải header) → badge `✎ EDIT` hiện trên canvas.
+- **Nối / xoá cạnh**: kéo từ handle node nguồn → node đích để tạo cạnh mới; click cạnh → **EdgePanel** (sửa nhãn `when` + nút Delete edge).
+- **Thêm node**: nút **+ Node** → **AddNodePanel** (điền `id` / `type` / `agent` / `output_key` / `prompt`).
+- **Xoá node**: click node → **NodePanel** → **Delete node** (cascade xoá mọi cạnh dính; dialog xác nhận).
+- **Sửa field node**: click node (edit mode) → NodePanel inline (type / agent / output_key / prompt).
+- **Sửa graph-level**: panel **Graph settings** (top-right khi edit mode) → dropdown `entry` + input `max_steps`.
+- **Save (validate-gated)**: nút **💾 Save graph** → `POST /api/workflow` → engine ghi `workflow.json` atomically:
+  - `validate` PASS → **commit** + toast `✓ Saved` + re-fetch graph.
+  - `validate` FAIL → **file cũ giữ nguyên** + panel **Validation errors** hiện `errors[]`. `workflow.json` LUÔN hợp lệ trên đĩa.
+- **Discard**: nút **Discard** → reload graph từ đĩa, bỏ mọi thay đổi chưa lưu.
+- **Unsaved guard**: chuyển project khi có thay đổi chưa save → dialog xác nhận. Badge `✎ EDIT — unsaved changes` khi dirty.
+- **Coordinate-free** (bất biến #2): `workflow.json` chỉ chứa semantic (`nodes`/`edges`/`entry`/`max_steps`); toạ độ (kể cả node mới) → `.layout.json` qua `/api/layout`. `git diff workflow.json` sau drag = ZERO toạ độ.
+
+> **Giới hạn**: App chỉ chạy `run` (HQ + project con, mock mặc định). `autobuild`/`autofix` (E2E real, sandbox/promote) dùng CLI. Edit graph = chỉ dạng **graph-format** (`nodes`/`edges`); pipeline-v1 dùng CLI `run.ps1 edit` (TUI). Undo/redo nhiều bước: reload = discard pending.
 
 ### Bất biến
 
 - **`workflow.json` KHÔNG bao giờ bị ghi toạ độ** — toạ độ chỉ nằm trong `<project>/.layout.json` (tách biệt, gitignored).
 - Data-layer gọi engine `run.ps1 graph <proj> -Json` (chuẩn hoá graph, xử UTF-16). App KHÔNG tự parse `workflow.json`.
-- **Engine BẤT BIẾN** — app chỉ gọi surface CLI sẵn (`run.ps1 run/resume/status`, Phase D). `git diff engine/` rỗng.
+- **Engine ghi qua `save-graph` additive** — `POST /api/workflow` shell `run.ps1 save-graph` (validate-gated, atomic); mock/validate/run path cũ y nguyên.
 - `server.mjs` dependency-free (Node `http`/`fs`/`child_process` thuần). Server bind `127.0.0.1`.
 
-### Files app (Phase E + F)
+### Files app (Phase E + F + G)
 
 | File | Vai trò |
 |---|---|
-| `app/server.mjs` | Server Node http: serve `dist/` + `GET /api/projects` + `GET /api/graph` + `GET/POST /api/layout` (E) + `POST /api/run` + `GET /api/events` SSE + `POST /api/decision` (F) |
-| `app/src/App.jsx` | Root: header + project picker + nút Run (Mock/Real) + run state + SSE client + `handleDecision` |
-| `app/src/GraphView.jsx` | Graph canvas: fetch graph+layout → dagre → React Flow + `nodeStatuses` highlight + save-on-drag + reset |
+| `app/server.mjs` | Server Node http: serve `dist/` + `GET /api/projects` + `GET /api/graph` + `GET/POST /api/layout` (E) + `POST /api/run` + `GET /api/events` SSE + `POST /api/decision` (F) + `GET /api/workflow` (raw) + `POST /api/workflow` validate-gated (G) |
+| `app/src/App.jsx` | Root: header + project picker + nút Run (Mock/Real) + run state + SSE client + `handleDecision` + **edit-mode toggle** (disabled khi pipeline-v1) |
+| `app/src/GraphView.jsx` | Graph canvas: fetch graph+layout → dagre → React Flow + `nodeStatuses` highlight + save-on-drag + reset + **edit-mode** (add/del node + form field + connect/delete edge + when-label + entry/max_steps + save validate-gated + discard) |
 | `app/src/RunLog.jsx` | Log panel: render từng event live (node_output đầy đủ, trạng thái, auto-scroll, clear) |
 | `app/src/ApprovalPanel.jsx` | Gate duyệt: prompt + choices (nút mỗi nhãn) + violations (diff_violation) |
 | `app/src/RealConfirmDialog.jsx` | Dialog cảnh báo đốt token khi bật Real mode |
 | `app/src/nodes.jsx` | 4 custom node types + ring highlight (running/done/awaiting) + StatusBadge |
 | `app/src/layout.js` | `applyDagreLayout`: dagre TB layout + detect back-edges |
+| `engine/save.ps1` | `Save-Graph` write→validate→commit-or-restore + `Strip-GraphCoordinates` + `Write-SaveResult` JSON stdout |
+| `examples/edit-demo/` | Fixture scratch graph-format (3 node: writer→checker router→publisher + revise back-edge) cho demo edit không bẩn `hq` |
 
 ---
 
@@ -555,6 +575,6 @@ company/
 └── plan/                # hq-build/{ROADMAP.md + phase-*/} (đợt build, DONE) + hq-improve/ (đợt cải thiện)
 ```
 
-**Trạng thái build**: toàn bộ Phase R / 0 / 1 / 2 / 3 / 4 / 5 / M đã ✅ DONE (xem [`plan/hq-build/ROADMAP.md`](plan/hq-build/ROADMAP.md)). **Phase E + F (App) ✅ DONE** — app web React+Vite+Tailwind+React Flow: xem graph tương tác + bấm Run (mock) → log live đầy đủ output + node sáng dần trên graph + duyệt gate HITL từ UI (approval panel + Real-confirm dialog). Xem §App bên trên.
+**Trạng thái build**: toàn bộ Phase R / 0 / 1 / 2 / 3 / 4 / 5 / M đã ✅ DONE (xem [`plan/hq-build/ROADMAP.md`](plan/hq-build/ROADMAP.md)). **Đợt hq-improve (A→G) ✅ ĐÓNG** — Phase B (CLI ergonomics) + D (HITL+events) + E+F+G (App: viewer → live-log → in-app edit). App web React+Vite+Tailwind+React Flow: xem graph tương tác + bấm Run → log live + node highlight + duyệt HITL + **sửa cấu trúc graph validate-gated**. Xem §App bên trên.
 
 Bộ test offline (mock, không đốt token): `examples/hq-tests.ps1` (per-agent HQ), `examples/hq-graph-tests.ps1` (8 path HQ graph), `examples/e2e-harness-tests.ps1` (harness round-trip). Chạy gom tất cả qua **`./run.ps1 selftest`** (3 script + 7 `p-*/stamp.ps1` + mem-demo + approval-demo done-gate; **12 mục tổng**; exit = số mục fail).

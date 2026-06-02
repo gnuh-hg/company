@@ -513,6 +513,22 @@ const server = createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true });
   }
 
+  // GET /api/workflow?project=<p> — return raw workflow.json (all semantic fields).
+  // Used by the edit UI to preserve node fields (input, output_key, etc.) on save.
+  if (pathname === '/api/workflow' && req.method === 'GET') {
+    const project = url.searchParams.get('project');
+    if (!project) return sendJson(res, 400, { error: 'missing project param' });
+    if (!SAFE_PROJECT.test(project)) return sendJson(res, 400, { error: 'invalid project name' });
+    const projectDir = await resolveProjectDir(project);
+    if (!projectDir) return sendJson(res, 404, { error: 'project not found' });
+    try {
+      const content = await readFile(join(projectDir, 'workflow.json'), 'utf-8');
+      return sendJson(res, 200, JSON.parse(content));
+    } catch (e) {
+      return sendJson(res, 500, { error: `cannot read workflow.json: ${e.message}` });
+    }
+  }
+
   // POST /api/workflow?project=<p> — save an edited graph, validate-gated.
   // Body: {nodes, edges, entry, max_steps} (semantic-only; coords stripped server-side).
   // Shells run.ps1 save-graph → engine writes+validates atomically:
