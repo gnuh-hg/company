@@ -2,58 +2,61 @@
 
 > Spec kiến trúc khoá cho toàn Phase H. Mỗi session H.1–H.10 đọc file này để biết "đang xây gì, tại sao, và đặt ở đâu". Không thay đổi mà không có revision log.
 
+> **⚠️ REVISE 2026-06-02 (reframe Q2):** bản H.0 đầu chốt "builder ghi file QUA engine `autobuild`/`autofix` (sandbox→promote)" + "planner xuất plan-as-data JSON" + "CTO xuất build-spec JSON cho `run.ps1 build`". User chỉ ra đây là **lậm form workflow cũ** — teammate là agent đọc/viết văn xuôi, KHÔNG có engine nào parse JSON đó. **Quyết mới (user chốt):** HQ team **build deliverable TRỰC TIẾP** (builder Write/Edit), giao tiếp giữa teammate bằng **văn xuôi tự nhiên**, KHÔNG build-spec / workflow.json / engine-build trong luồng HQ. Engine (`run.ps1` + app) là **tool đứng riêng** cho workflow-chi-nhánh, HQ không bắt buộc đi qua. Legacy `hq/` đã **XÓA** (xem §8). Các mục dưới đã viết lại theo quyết định này.
+
 ---
 
 ## 1. Sơ đồ orchestration — flow ĐỘNG (không DAG)
 
-**Lead** là Claude Code session chính (model: claude-opus-4-8 hoặc sonnet tùy ngữ cảnh). Lead KHÔNG gọi `hq/workflow.json` — lead điều phối bằng reasoning trực tiếp + TeamCreate.
+**Lead** là Claude Code session chính (model: claude-opus-4-8 hoặc sonnet tùy ngữ cảnh). Lead điều phối bằng reasoning trực tiếp + TeamCreate. KHÔNG có `workflow.json` HQ.
 
 ### Khi nào lead spawn team vs tự làm
 
 | Tình huống | Lead làm gì |
 |---|---|
-| Request mới cần nghiên cứu toàn pipeline | Spawn team đầy đủ: researcher → planner → cto → builder → tester |
+| Request mới cần xây thật, multi-file / domain mới | Spawn team: researcher → planner → cto → builder → tester |
 | Request đơn giản (clarification, status check) | Lead tự xử, không spawn |
-| Fix branch đã có (validate fail) | Spawn builder + tester (bỏ researcher/planner/cto) |
+| Sửa deliverable đã có | Spawn builder + tester (bỏ researcher/planner/cto) |
 | Cần thêm 1 teammate bất kỳ | TeamCreate với danh sách tối thiểu cần thiết |
 
-**Size team thực tế**: 3–5 teammate. Không spawn nếu lead có thể tự làm trong 1–2 tool call.
+**Size team thực tế**: 3–5 teammate. Không spawn nếu lead tự làm được trong 1–2 tool call.
 
 ### Flow điển hình: build request mới
 
 ```
 LEAD nhận user_request
-  └─► LEAD phân loại (research cần chưa? đơn giản hay phức tạp?)
+  └─► LEAD phân loại (đơn giản hay cần team?)
         ├── phức tạp / multi-file / domain mới
         │     └─► TeamCreate [researcher, planner, cto, builder, tester]
         │           │
-        │           ├─► SendMessage → researcher: "gom context về request + memory"
-        │           │     └─► researcher trả tóm tắt + open_questions[]
+        │           ├─► researcher: "gom context về request + memory"
+        │           │     └─► trả tóm tắt + câu hỏi còn chặn (VĂN XUÔI)
         │           │
-        │           ├─► LEAD xét open_questions:
+        │           ├─► LEAD xét câu hỏi còn chặn:
         │           │     ├── còn câu chặn → LEAD hỏi user trực tiếp (clarify động)
         │           │     └── đủ rõ → tiếp
         │           │
-        │           ├─► SendMessage → planner: "dựng plan-as-data từ research"
-        │           │     └─► planner trả plan JSON (WHAT)
+        │           ├─► planner: "lập kế hoạch WHAT từ research"
+        │           │     └─► trả plan markdown (Goal/Steps/Done-criteria) — KHÔNG JSON
         │           │
-        │           ├─► SendMessage → cto: "dựng build-spec từ plan"
-        │           │     └─► cto trả build-spec (HOW, chọn vai catalog/)
+        │           ├─► cto: "thiết kế HOW từ plan"
+        │           │     └─► trả thiết kế kỹ thuật VĂN XUÔI (cấu trúc file, cách tiếp cận,
+        │           │          công nghệ; tham khảo catalog/ nếu hữu ích) — KHÔNG build-spec JSON
         │           │
-        │           ├─► SendMessage → builder: "build chi nhánh từ spec"
-        │           │     └─► builder shell: pwsh run.ps1 autobuild <spec>
-        │           │           └─► engine: sandbox → run real → validate → promote
+        │           ├─► builder: "build deliverable theo thiết kế"
+        │           │     └─► Write/Edit file TRỰC TIẾP vào projects/<name>/ + Bash chạy build/cài
+        │           │          (KHÔNG qua run.ps1 autobuild; KHÔNG workflow.json)
         │           │
-        │           ├─► SendMessage → tester: "kiểm tra branch vừa promote"
-        │           │     └─► tester shell: pwsh run.ps1 check <branch>
-        │           │                        pwsh run.ps1 trial <branch>
-        │           │           ├── pass → ghi memory + báo LEAD
-        │           │           └── fail → báo LEAD kèm reason máy-đọc-được
+        │           ├─► tester: "kiểm deliverable vừa build"
+        │           │     └─► chạy CHECK KHÁCH QUAN của chính deliverable (test suite / build /
+        │           │          lint / quan sát hành vi) → lấy exit-code/kết quả
+        │           │          ├── pass → ghi memory + báo LEAD
+        │           │          └── fail → báo LEAD kèm lý do cụ thể (output lệnh, dòng lỗi)
         │           │
         │           ├─► LEAD xét verdict:
         │           │     ├── pass → record memory + shutdown team + báo user
-        │           │     ├── fail (minor, builder có thể fix) → SendMessage → builder re-fix
-        │           │     └── fail (structural) → SendMessage → planner re-plan → loop
+        │           │     ├── fail (builder sửa được) → builder re-fix
+        │           │     └── fail (structural) → planner re-plan → loop
         │           │
         │           └─► LEAD shutdown team khi done
         │
@@ -64,11 +67,11 @@ LEAD nhận user_request
 
 | Gate cũ (workflow.json) | Thay bằng gì trong lead |
 |---|---|
-| `coo` (router build/fix/unclear) | Lead phân loại bằng reasoning — không cần router riêng |
-| `rg_gate` (đủ research chưa) | Lead xét `open_questions[]` từ researcher |
+| `coo` (router build/fix/unclear) | Lead phân loại bằng reasoning |
+| `rg_gate` (đủ research chưa) | Lead xét câu-hỏi-còn-chặn từ researcher |
 | `clarify_gate` (hỏi user) | Lead hỏi user trực tiếp (native) |
-| `escalate_gate` / `escalate_report` | Lead quyết định escalate sau N vòng fail |
-| `record` (node ghi memory) | Lead gọi skill `hq-memory` trực tiếp sau verify done |
+| `escalate_gate` / `escalate_report` | Lead quyết escalate sau N vòng fail |
+| `record` (node ghi memory) | Lead gọi skill `hq-memory` sau verify done |
 
 ---
 
@@ -76,26 +79,31 @@ LEAD nhận user_request
 
 ### 5 teammate def — `company/.claude/agents/hq-*.md`
 
-| Teammate file | Nguồn (chuyển hoá từ) | Tools | Model | Vai trò |
-|---|---|---|---|---|
-| `hq-researcher.md` | `hq/agents/researcher.md` | Read, Grep, Glob, WebSearch | claude-sonnet-4-6 | Gom context request + memory → tóm tắt + open_questions[] |
-| `hq-planner.md` | `hq/agents/planner.md` | Read | claude-sonnet-4-6 | WHAT — plan-as-data từ research |
-| `hq-cto.md` | `hq/agents/cto.md` | Read | claude-sonnet-4-6 | HOW — build-spec, chọn vai catalog/ |
-| `hq-builder.md` | `hq/agents/builder.md` | Read, Bash | claude-sonnet-4-6 | Ghi file qua engine autobuild/autofix — KHÔNG Write/Edit trực tiếp |
-| `hq-tester.md` | `hq/agents/tester.md` | Read, Bash | claude-sonnet-4-6 | Chạy check/trial engine lấy exit-code + ghi memory |
+| Teammate file | Tools | Model | Vai trò |
+|---|---|---|---|
+| `hq-researcher.md` | Read, Grep, Glob, WebSearch | claude-sonnet-4-6 | Gom context request + memory → tóm tắt + câu hỏi còn chặn (VĂN XUÔI) |
+| `hq-planner.md` | Read | claude-sonnet-4-6 | WHAT — kế hoạch markdown (Goal/Steps/Done-criteria), KHÔNG JSON |
+| `hq-cto.md` | Read | claude-sonnet-4-6 | HOW — thiết kế kỹ thuật VĂN XUÔI; tham khảo `catalog/` tùy chọn; KHÔNG build-spec |
+| `hq-builder.md` | Read, **Write, Edit, Bash** | claude-sonnet-4-6 | Ghi file deliverable TRỰC TIẾP vào `projects/<name>/`; Bash chạy build/test; KHÔNG run.ps1 autobuild |
+| `hq-tester.md` | Read, Bash | claude-sonnet-4-6 | Chạy check KHÁCH QUAN của deliverable (test/build/lint exit-code) + báo verdict; ghi memory |
 
-**Convention tên**: tiền tố `hq-` để tránh nhầm với agent META `.claude/agents/planner.md` (dùng để soạn PLAN/CHECKPOINT cho các phase). Hai agent cùng tên `planner` sẽ gây nhầm lẫn nghiêm trọng.
+**Convention tên**: tiền tố `hq-` để tránh nhầm với agent META `.claude/agents/planner.md` (soạn PLAN/CHECKPOINT cho các phase). Hai agent cùng tên `planner` sẽ gây nhầm lẫn nghiêm trọng.
+
+**Nguyên tắc xuyên suốt 5 teammate (chống lậm form cũ):**
+- Giao tiếp giữa teammate = **văn xuôi markdown tự nhiên** cho người/agent đọc. KHÔNG JSON schema, KHÔNG "plan-as-data", KHÔNG build-spec, KHÔNG ép field cứng.
+- Chỉ builder có quyền ghi file (Write/Edit). researcher/planner/cto/tester read-only (tester thêm Bash để CHẠY check, không sửa file).
+- Quality-gate = **kết quả khách quan của chính deliverable** (test/build/lint), không để LLM phán cảm tính.
 
 ### 6 thành phần KHÔNG thành teammate + lý do
 
 | Thành phần cũ | Lý do KHÔNG tạo teammate |
 |---|---|
-| `coo` (router) | Logic phân loại đơn giản — lead reasoning làm tốt hơn mà không cần overhead spawn. Không đủ "công việc" để là một teammate. |
-| `rg_gate` (router) | Chỉ đọc dòng cuối output researcher — lead tự xét trivially. |
-| `clarify_gate` | Lead hỏi user native (không cần agent trung gian). |
+| `coo` (router) | Phân loại đơn giản — lead reasoning làm tốt hơn, không cần overhead spawn. |
+| `rg_gate` (router) | Chỉ xét câu-hỏi-còn-chặn của researcher — lead tự làm trivially. |
+| `clarify_gate` | Lead hỏi user native. |
 | `escalate_gate` | Lead tự đếm vòng fail và quyết escalate. |
-| `escalate_report` | Lead tự báo cáo user khi escalate. Không cần agent viết báo cáo. |
-| `record` (node ghi memory) | Thay bằng skill `hq-memory` — lead gọi skill sau verify, không cần teammate riêng. |
+| `escalate_report` | Lead tự báo cáo user khi escalate. |
+| `record` (node ghi memory) | Thay bằng skill `hq-memory` — lead gọi sau verify. |
 
 ---
 
@@ -107,32 +115,32 @@ company/.claude/
 ├── settings.local.json              # giữ nguyên
 ├── agents/
 │   ├── planner.md                   # META planner — GIỮ NGUYÊN, không đụng
-│   ├── hq-researcher.md             # H.2
-│   ├── hq-planner.md                # H.3
+│   ├── hq-researcher.md             # H.2 (đã soạn lại form prose 2026-06-02)
+│   ├── hq-planner.md                # H.3 (đã soạn lại form prose 2026-06-02)
 │   ├── hq-cto.md                    # H.4
 │   ├── hq-builder.md                # H.5
 │   └── hq-tester.md                 # H.6
 ├── skills/
 │   ├── plan-long/SKILL.md           # giữ nguyên
 │   ├── plan-short/SKILL.md          # giữ nguyên
-│   ├── engine-ops/SKILL.md          # H.7 — scaffold/patch/diagnose/run-test
+│   ├── build-verify/SKILL.md        # H.7 — quy ước build deliverable trực tiếp + verify khách quan
 │   └── hq-memory/SKILL.md           # H.8 — đọc/ghi .claude/memory/
 ├── memory/                          # HQ-team store (tách bạch engine branch)
-│   ├── README.md                    # schema: ai đọc/ghi, delimiter, cap N
-│   ├── context.md                   # bối cảnh làm việc hiện tại của HQ-team
-│   ├── mistakes.md                  # lỗi đã gặp + không lặp lại
-│   ├── patterns.md                  # pattern thành công tái dùng
-│   └── global.md                    # ghi chú cross-cutting
+│   ├── README.md
+│   ├── context.md
+│   ├── mistakes.md
+│   ├── patterns.md
+│   └── global.md
 ├── teams/
 │   ├── playbook.md                  # H.1 skeleton → H.9 đầy đủ
 │   └── team-issues-queue.md         # H.9
 └── hq-master.md                     # orchestration doc — flow động + trỏ playbook + roster
 ```
 
-**Phân biệt engine vs HQ-team:**
-- `company/.claude/memory/` — store **làm việc của HQ-team** (đọc/ghi bởi lead + tester qua `hq-memory` skill)
-- `company/memory/` — store **engine branch HQ-global** (đọc/ghi bởi engine `memory.ps1` → node `record`)
-- `<project>/memory/` — store **per-branch** (engine tạo lúc `Write-MemoryEntry` với type `context`)
+**Phân biệt 3 store:**
+- `company/.claude/memory/` — store **làm việc của HQ-team** (lead + tester ghi qua `hq-memory` skill).
+- `company/memory/` — store **engine branch HQ-global** (engine `memory.ps1`; nay HQ-team KHÔNG ghi).
+- `<project>/memory/` — store **per-branch** (engine tạo khi node `record` ghi `context`).
 
 ---
 
@@ -142,185 +150,141 @@ company/.claude/
 
 | File | Ai ghi | Ai đọc | Nội dung |
 |---|---|---|---|
-| `context.md` | Lead / tester (qua hq-memory skill) | Lead đầu task | Bối cảnh làm việc: branch nào đang build, trạng thái, quyết định gần đây |
-| `mistakes.md` | Lead / tester | Lead + researcher | Lỗi thực tế đã gặp (builder fail, spec hỏng, engine error) — không tái phạm |
+| `context.md` | Lead / tester (qua hq-memory) | Lead đầu task | Đang build gì, trạng thái, quyết định gần đây |
+| `mistakes.md` | Lead / tester | Lead + researcher | Lỗi thực tế đã gặp (build fail, thiết kế hỏng) — không tái phạm |
 | `patterns.md` | Lead / tester | Lead + cto | Pattern thành công (loại request → cách build hiệu quả) |
-| `global.md` | Lead | Lead | Ghi chú cross-cutting: con người, quyết định kiến trúc, phạm vi engine |
+| `global.md` | Lead | Lead | Ghi chú cross-cutting: con người, quyết định kiến trúc |
 
-**Format entry** (mirror engine memory):
+**Format entry**:
 ```
 ## <YYYY-MM-DD HH:MM> — <slug-ngắn>
 <nội dung>
 ```
 
-**Cap N = 10** entry mới nhất được load (cũ hơn vẫn lưu file, chỉ bỏ qua khi đọc).
-
-**Skill đọc**: đọc đầu task (`hq-memory` skill) — team lead thường đọc `context.md` + `mistakes.md` trước khi giao việc.
+**Cap N = 10** entry mới nhất được load (cũ hơn vẫn lưu file).
 
 ### `company/memory/` + `<project>/memory/` — engine branch store
 
-- **BẤT BIẾN** — engine `memory.ps1` (`Get-Memory` / `Write-MemoryEntry`) không đổi.
-- Ghi bởi node `record` (`memory_write`) trong `hq/workflow.json` (legacy, vẫn chạy được).
-- Team HQ-native KHÔNG ghi vào store này — nếu muốn lưu bài học từ chi nhánh, lead ghi vào `.claude/memory/mistakes.md` hoặc `patterns.md`.
-- `git diff engine/` RỖNG mọi session Phase H — đây là bất biến kiểm chứng được.
+- **BẤT BIẾN** — engine `memory.ps1` không đổi. HQ-team KHÔNG ghi vào đây.
+- `git diff engine/` chỉ thay đổi ở session reframe này (de-wire selftest + comment) — sau đó rỗng lại.
 
 ---
 
-## 5. Hợp đồng "engine như tool"
+## 5. Hợp đồng "build deliverable trực tiếp" (thay "engine như tool")
 
-Teammate **chỉ GỌI** engine qua Bash shell — không đọc/sửa `engine/*.ps1`.
+> **REVISE Q2:** bản cũ ghi "teammate gọi engine `run.ps1 autobuild/check/trial` để build/test". Quyết mới: HQ team build TRỰC TIẾP, KHÔNG đi qua engine.
 
-### Lệnh teammate được dùng
+### Builder workflow
 
-| Lệnh | Teammate dùng | Mục đích |
-|---|---|---|
-| `pwsh run.ps1 build <spec-file> [outName]` | builder | Scaffold chi nhánh từ build-spec (deterministic) |
-| `pwsh run.ps1 autobuild <proj> "<req>" -Real` | builder | Build + sandbox + run real + validate + promote |
-| `pwsh run.ps1 autofix <proj> "<req>" -Seed <br> -Branch <n> -Real` | builder | Fix-loop branch hỏng |
-| `pwsh run.ps1 validate <proj>` | builder, tester | Kiểm schema/agent/router/reachability |
-| `pwsh run.ps1 check <proj>` | tester | Tầng cấu trúc: validate exit0 + run -Mock done + output_key non-empty |
-| `pwsh run.ps1 trial <proj>` | tester | Tầng trial THẬT: assert `trial[]` (đốt token — dùng khi check pass) |
-| `pwsh run.ps1 status <proj>` | tester, lead | Xem trạng thái run gần nhất |
-| `pwsh run.ps1 graph <proj> -Json` | lead, tester | Lấy graph JSON chuẩn hoá (nodes/edges) để đọc |
+1. Nhận thiết kế (văn xuôi) từ CTO + plan từ planner (qua Task/SendMessage).
+2. **Write/Edit file deliverable trực tiếp** vào `projects/<name>/` (output location chuẩn; gitignored, regen-được).
+3. **Bash** để cài deps / build / chạy app khi cần (vd `npm install`, `npm run build`).
+4. Báo tester khi deliverable sẵn sàng, kèm cách chạy/kiểm.
+5. KHÔNG dùng `run.ps1 autobuild/autofix/build`; KHÔNG tạo `workflow.json` HQ; KHÔNG đụng `engine/*.ps1`.
 
-**Đường dẫn gọi**: teammate làm việc trong `company/` → gọi `pwsh /home/.../company/engine/run.ps1 ...` hoặc `pwsh engine/run.ps1` tuỳ cwd. Skill `engine-ops` ghi rõ convention cwd.
+### Tester workflow — quality-gate khách quan
 
-### Đọc kết quả engine
+1. Chạy **check của chính deliverable**: test suite (`npm test`/`pytest`/...), build (`npm run build`), lint, hoặc quan sát hành vi nếu không có test tự động.
+2. Đọc **exit-code / output** làm nguồn sự thật — KHÔNG phán "trông ổn".
+3. In verdict máy-đọc-được:
+   ```
+   CHECK_RESULT: pass|fail (<lý do/output lệnh nếu fail>)
+   ```
+4. Báo lead. Fail → lead nhận lý do cụ thể rồi quyết re-fix/re-plan.
 
-| Nguồn | Đọc bằng | Ý nghĩa |
-|---|---|---|
-| **Exit code** | `$LASTEXITCODE` sau lệnh pwsh | 0 = pass; N > 0 = N tiêu chí fail |
-| **`Write-CheckResult`** stdout | Parse dòng cuối (reason máy-đọc-được) | Tiêu chí nào fail, vì sao |
-| **`Write-E2EResult`** stdout | JSON `{"ok":bool,"errors":[...]}` | autobuild/autofix thành công hay không |
-| **`Write-SaveResult`** stdout | JSON `{"ok":bool,"errors":[...]}` | save-graph thành công hay không |
-| **`.runs/<runid>/events.ndjson`** | Read file (NDJSON) | Event stream đầy đủ (node_output, awaiting...) |
-| **`.runs/<runid>/state.json`** | Read file | Trạng thái run: status, visits, awaiting |
-| **`projects/<name>/`** | `run.ps1 status <name>` | Chi nhánh đã promote (sau autobuild thành công) |
+### Engine = tool đứng riêng (tùy chọn, không trong luồng HQ build)
 
-**Builder workflow** cụ thể:
-1. Nhận build-spec từ CTO (qua Task/SendMessage).
-2. Shell `run.ps1 autobuild <spec> -Real` → đọc stdout JSON `{"ok":bool}`.
-3. Nếu `ok=false`: đọc `errors[]` → báo lead để re-plan hoặc tự `autofix`.
-4. Nếu `ok=true`: chi nhánh đã promote vào `projects/<name>/` — báo tester.
-5. Builder KHÔNG tự `Write`/`Edit` file trong `<project>/` — engine sandbox/promote lo.
+`run.ps1` + app vẫn tồn tại như **công cụ workflow-chi-nhánh độc lập**. Nếu (và chỉ nếu) request CỤ THỂ là "dựng/sửa một workflow pipeline" thì lead/builder có thể gọi `run.ps1 validate/run/graph` — nhưng đó là ngoại lệ, không phải đường build mặc định. Mặc định: build trực tiếp.
 
 ---
 
 ## 6. Quality-gate khách quan
 
-**Nguyên tắc**: không để LLM "phán" pass/fail bằng cảm tính — exit code engine là nguồn sự thật.
+**Nguyên tắc**: không để LLM "phán" pass/fail cảm tính — kết quả lệnh của chính deliverable là nguồn sự thật.
 
-### Cơ chế chính: exit-code trong tester body
+### Cơ chế chính: tester chạy check của deliverable
 
-Tester chạy:
 ```bash
-pwsh run.ps1 check <branch>
-# $LASTEXITCODE = 0 → pass, > 0 → fail (số tiêu chí fail)
-
-pwsh run.ps1 trial <branch>
-# $LASTEXITCODE = 0 → pass
+# ví dụ — tùy loại deliverable
+npm test        # $? = 0 → pass
+npm run build   # $? = 0 → build ok
 ```
 
-Tester bắt buộc in verdict dạng máy-đọc-được:
-```
-CHECK_RESULT: pass|fail (N criteria failed)
-TRIAL_RESULT: pass|fail
-```
+Tester bắt buộc in `CHECK_RESULT: pass|fail (...)`. Lead đọc verdict từ TaskOutput/SendMessage.
 
-Lead đọc verdict từ TaskOutput/SendMessage — nếu fail, lead nhận `reason` từ stdout engine rồi quyết re-plan/re-fix.
+### Khi deliverable KHÔNG có test tự động
 
-### Cơ chế bổ sung: hook `TaskCompleted` (tuỳ chọn, chốt dùng)
+Tester định nghĩa **kiểm-tra quan sát-được** từ done-criteria của planner (vd "mở trang → nhập email sai → thấy báo lỗi") và chạy/quan sát, ghi rõ đã kiểm gì + kết quả. Vẫn cụ thể, không cảm tính.
 
-**Quyết định**: dùng **convention-trong-body** là đủ cho Phase H (exit-code bắt buộc in verdict). Hook `TaskCompleted`/`TeammateIdle` (exit 2 chặn) là option mạnh hơn — **defer sang Phase I/K** khi cần hardening thêm. Lý do defer: (a) hook chạy shell ngoài → cần thêm config, tăng độ phức tạp H.1; (b) convention đã đủ nếu tester body tuân thủ chặt; (c) Phase H focus vào correctness từng teammate, không hardening flow.
+### Cơ chế bổ sung: hook (defer)
+
+Hook `TaskCompleted`/`TeammateIdle` (exit 2 chặn) là option mạnh hơn — **defer Phase I/K**. Phase H đủ với convention-trong-body (tester bắt buộc in `CHECK_RESULT`).
 
 ### Escalation sau N vòng fail
 
-Lead tự đếm vòng (soft-escalate sau 2 re-plan, hard-escalate sau 3):
-- 2 vòng fail → lead báo user kèm reason, hỏi có muốn tiếp không.
-- 3 vòng fail → lead shutdown team, báo cáo tổng hợp lỗi, ghi `mistakes.md`.
+Lead tự đếm vòng: 2 vòng fail → báo user kèm lý do, hỏi tiếp không; 3 vòng → shutdown team, báo cáo tổng hợp, ghi `mistakes.md`.
 
 ---
 
 ## 7. Skill inventory
 
-### Ánh xạ `hq/skills.md` → skill project-scope Phase H
+### 2 skill project-scope (vì frontmatter `skills` của teammate bị bỏ qua → phải project-scope)
 
-| Skill cũ (hq/skills.md) | → Skill project-scope | Session |
+| Skill | Session | Nội dung |
 |---|---|---|
-| scaffold (builder dùng `run.ps1 build`) | `engine-ops` | H.7 |
-| patch (builder Write/Edit trực tiếp) | **không còn** — builder H-native dùng engine autobuild, không Write/Edit | — |
-| diagnose (đọc reason từ check/trial) | `engine-ops` | H.7 |
-| run-test (check + trial) | `engine-ops` | H.7 |
-| report (ghi memory) | `hq-memory` | H.8 |
+| `build-verify` | H.7 | Quy ước build deliverable TRỰC TIẾP: nơi ghi (`projects/<name>/`), cách cấu trúc, cách tester verify khách quan (chạy test/build/lint của deliverable, đọc exit-code, in `CHECK_RESULT`). Ranh giới: builder không đụng `engine/*.ps1`. |
+| `hq-memory` | H.8 | Đọc `context.md`+`mistakes.md` đầu task; append entry date-stamped cuối task (delimiter `## <date> — <slug>`, cap N=10). Cảnh báo: KHÔNG nhầm `.claude/memory/` với `company/memory/` (engine store). |
 
-**Tổng: 2 skill project-scope** → 2 session H-C (H.7 + H.8).
-
-### Nội dung từng skill
-
-**`engine-ops`** (`company/.claude/skills/engine-ops/SKILL.md`):
-- Bảng 7+ lệnh `run.ps1` (validate/check/trial/build/autobuild/autofix/graph-Json/status)
-- Mục "đọc kết quả" (exit code, stdout JSON, events.ndjson, state.json)
-- Mục "ranh giới" (chỉ gọi, không sửa engine/*.ps1; cwd convention)
-- Mục "lỗi thường gặp" (cwd sai, path spec tương đối vs tuyệt đối)
-
-**`hq-memory`** (`company/.claude/skills/hq-memory/SKILL.md`):
-- Đọc đầu task: load `context.md` + `mistakes.md` vào context trước khi bắt đầu
-- Ghi cuối task: append entry date-stamped vào file đúng loại (context/mistakes/patterns/global)
-- Format delimiter (mirror engine memory `## <YYYY-MM-DD HH:MM> — <slug>`)
-- Cảnh báo rõ: KHÔNG nhầm `.claude/memory/` với `company/memory/` (engine store)
+> **Bỏ skill `engine-ops` (bản cũ)**: bản H.0 cũ dự định `engine-ops` gói cách gọi `run.ps1 build/autobuild/check/trial`. Sau Q2, builder/tester KHÔNG đi qua engine → skill đó vô nghĩa. Thay bằng `build-verify` (quy ước build trực tiếp + verify). Vẫn **2 skill / 2 session** (H.7 + H.8).
 
 ---
 
-## 8. Số phận legacy
+## 8. Số phận legacy — ĐÃ XÓA (reframe 2026-06-02)
 
-**Quyết định** (đã chốt user 2026-06-02): `hq/workflow.json` + `hq/agents/*.md` + `examples/hq-*` + `hq-graph-tests` trong selftest — **GIỮ NGUYÊN làm tham chiếu** trong suốt Phase H và toàn đợt hq-v2. Không xoá, không rename.
+> **REVISE Q2:** bản cũ chốt "giữ legacy làm tham chiếu, dọn cuối roadmap". User quyết XÓA NGAY trong session reframe này (legacy là nguồn gây lậm form cũ).
 
-**Lý do giữ**: nguồn chuyển hoá agent (H-B đọc để viết teammate def); safety net kiểm tra regression; tài liệu kiến trúc cũ.
+**Đã xóa (git rm, 2026-06-02):**
+- `hq/workflow.json` + `hq/workflow.mmd` (DAG HQ cũ)
+- `hq/agents/*.md` (11 node prompt — nguồn lậm form)
+- `hq/build-spec.md` + `hq/skills.md` (doc workflow HQ)
+- `examples/hq-coo|hq-cto|hq-planner|hq-tester/` (per-agent mock fixtures)
+- `examples/hq-tests.ps1` + `examples/hq-graph-tests.ps1` (test workflow HQ)
 
-**Dọn cuối roadmap**: hàng "DỌN legacy (sau Phase L)" đã thêm vào `plan/hq-v2/ROADMAP.md` — làm sau khi toàn bộ hq-v2 (H→L) xong và HQ-native đã proven stable.
+**De-wire selftest**: `engine/test-runner.ps1` gỡ `hq-tests`+`hq-graph-tests` khỏi vòng script → **12 mục còn 10**. `e2e-harness-tests` GIỮ (repoint fixture `hq/` → `examples/loopy`).
+
+**Engine giữ nguyên code, nhưng lưu ý vestigial:** `engine/e2e.ps1` (`Invoke-E2E`/`Invoke-E2EFix` = `autobuild`/`autofix`) hardcode terminal `'record'` — build riêng cho graph HQ. Sau Q2 HQ không dùng → 2 hàm này **vestigial** (engine code còn, không có consumer trong luồng HQ). KHÔNG xóa trong session này (đụng engine executor); ghi nhận candidate dọn ở §Dọn-legacy ROADMAP nếu sau này xác nhận standalone-engine cũng không cần.
 
 ---
 
 ## 9. Done-gate Phase H + đo token baseline
 
-### Done-gate (checklist — xem PLAN.md Outcome cuối để biết chi tiết)
+### Done-gate (checklist)
 
-- [ ] `design.md` chốt đủ 9 mục; mọi "cần làm rõ" ROADMAP §H trả lời
+- [ ] `design.md` chốt đủ 9 mục theo quyết định Q2; mọi "cần làm rõ" ROADMAP §H trả lời
 - [ ] Flag `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` bật; CC ≥ v2.1.32 verified
-- [ ] 5 teammate def `hq-{researcher,planner,cto,builder,tester}.md`, mỗi cái đạt checklist (a)–(d)
-- [ ] 2 skill (`engine-ops` + `hq-memory`), mọi lệnh tham chiếu thật
-- [ ] `.claude/memory/` 4 file + store HQ-team tách bạch engine (`git diff engine/` rỗng)
+- [ ] 5 teammate def `hq-{researcher,planner,cto,builder,tester}.md` form prose (KHÔNG JSON ceremony), mỗi cái đạt checklist (a)–(d)
+- [ ] 2 skill (`build-verify` + `hq-memory`), mọi lệnh/quy ước tham chiếu thật
+- [ ] `.claude/memory/` 4 file + store HQ-team tách bạch engine
 - [ ] `playbook.md` đủ 6 mục + flow động + `team-issues-queue.md`
-- [ ] Chạy thật H.10: lead dựng chi nhánh thật qua engine, test qua engine, record memory — hoàn toàn động
+- [ ] Chạy thật H.10: lead dựng + verify 1 deliverable trực tiếp (KHÔNG engine-build), tester check khách quan, record memory — hoàn toàn động
 - [ ] Báo cáo token: team-native vs HQ-workflow cũ
-- [ ] Legacy còn nguyên + hàng "DỌN legacy" trong ROADMAP
-- [ ] Regression 3-lệnh PASS session cuối; ROADMAP Phase H → ✅
+- [ ] Legacy đã xóa + ghi nhận trong ROADMAP §Dọn-legacy
+- [ ] Regression (validate hello + run hello -Mock + selftest 10/10) PASS session cuối; ROADMAP Phase H → ✅
 
-### Cách đo token baseline (HQ-workflow cũ)
-
-**Ước lượng HQ-workflow cũ** (không chạy thật, tính từ cấu trúc):
+### Token baseline (HQ-workflow cũ — ước lượng từ cấu trúc, để so ở H.10)
 
 | Node | Lượt | Token/lượt (est) | Tổng est |
 |---|---|---|---|
-| coo (router, haiku) | 1 | ~500 | ~500 |
-| researcher (sonnet) | 1 | ~2000 | ~2000 |
-| rg_gate (router, haiku) | 1 | ~300 | ~300 |
-| clarify_gate (nếu cần) | 0–1 | ~500 | ~0–500 |
-| planner (sonnet) | 1 | ~3000 | ~3000 |
-| cto (sonnet) | 1 | ~3000 | ~3000 |
-| builder (sonnet, nhiều vòng) | 2–4 | ~5000 | ~10000–20000 |
-| tester router | 1 | ~500 | ~500 |
-| escalate_gate | 0–1 | ~300 | ~0–300 |
-| record (ghi memory) | 1 | ~500 | ~500 |
-| **Tổng ước** | | | **~20k–30k tokens** (happy path, 1 attempt builder) |
+| coo (router) | 1 | ~500 | ~500 |
+| researcher | 1 | ~2000 | ~2000 |
+| rg_gate / clarify_gate / escalate_gate (routers) | 1–3 | ~300–500 | ~0.5–1.5k |
+| planner | 1 | ~3000 | ~3000 |
+| cto | 1 | ~3000 | ~3000 |
+| builder (nhiều vòng) | 2–4 | ~5000 | ~10–20k |
+| tester / record | 2 | ~500 | ~1000 |
+| **Tổng ước** | | | **~20k–30k tokens** (happy path) |
 
-**Ước lượng HQ-native** (H.10 sẽ đo thực tế):
-- Bỏ overhead: coo (tan vào lead) + rg_gate + clarify_gate + escalate_gate + escalate_report + record node
-- Lead điều phối trực tiếp → ít intermediate step hơn
-- Teammate conversation history **không kế thừa** (bắt đầu fresh mỗi spawn) → ít context lặp
-- **Kỳ vọng**: tiết kiệm 20–40% so với baseline (chủ yếu nhờ bỏ router nodes + context không tích lũy)
-
-H.10 sẽ ghi `usage` từng teammate (best-effort từ `/usage` hoặc estimate từ API response headers) và so sánh với bảng trên.
+**HQ-native kỳ vọng giảm 20–40%**: bỏ router nodes (tan vào lead) + bỏ overhead build-spec/workflow.json round-trip + giao tiếp prose gọn hơn JSON ceremony + teammate context không tích lũy. H.10 đo `usage` thực tế từng teammate.
 
 ---
 
@@ -328,4 +292,5 @@ H.10 sẽ ghi `usage` từng teammate (best-effort từ `/usage` hoặc estimate
 
 | Date | Change | Lý do |
 |---|---|---|
-| 2026-06-02 | Initial (H.0) | Soạn đủ 9 mục theo PLAN.md Phase H.0. Chốt: convention-trong-body cho quality-gate (hook defer I/K); `patch` skill không còn (builder dùng engine); 2 skill project-scope; tên tiền tố `hq-` cho teammate. |
+| 2026-06-02 | Initial (H.0) | Soạn đủ 9 mục theo PLAN.md Phase H.0. |
+| 2026-06-02 | **REVISE Q2 (reframe)** | User chỉ ra teammate lậm form workflow cũ (planner xuất JSON vô nghĩa). Đảo: builder build TRỰC TIẾP (Write/Edit, KHÔNG engine-build); giao tiếp prose; bỏ build-spec/workflow.json/plan-as-data khỏi luồng HQ; engine thành tool đứng riêng. Legacy `hq/` + `examples/hq-*` + 2 test script XÓA; selftest 12→10; `engine-ops` skill → `build-verify`. Soạn lại `hq-researcher`+`hq-planner` form prose. |

@@ -22,11 +22,7 @@ const DIST_DIR = join(__dirname, 'dist');
 const COMPANY = resolve(__dirname, '..');
 const ENGINE_DIR = join(COMPANY, 'engine');
 const ENGINE_RUN = join(ENGINE_DIR, 'run.ps1');
-// Spawn run.ps1 from engine/ (its documented cwd). From COMPANY, Resolve-ProjectDir
-// returns a *relative* dir for top-level projects whose name matches a child of
-// COMPANY (e.g. `hq`) — that relative system-prompt path then mis-resolves once
-// claude's cwd is pushed to the project dir (→ `hq/hq/agents/coo.md`). Engine cwd
-// makes the path $here-anchored (absolute), so it resolves correctly.
+// Spawn run.ps1 from engine/ (its documented cwd) so project paths resolve correctly.
 const PWSH = process.env.PWSH || 'pwsh';
 const PORT = Number(process.env.PORT) || 5179;
 const SAFE_PROJECT = /^[A-Za-z0-9._-]+$/;
@@ -98,7 +94,7 @@ function sendJson(res, status, body) {
 }
 
 // List drawable projects (those with a workflow.json). Resolve precedence
-// matches the engine: projects/ > examples/ > hq (earlier source wins on name).
+// matches the engine: projects/ > examples/ (earlier source wins on name).
 async function listProjects() {
   const seen = new Map(); // name -> source
   const scan = async (source, dir) => {
@@ -114,19 +110,15 @@ async function listProjects() {
   };
   await scan('projects', join(COMPANY, 'projects'));
   await scan('examples', join(COMPANY, 'examples'));
-  if (existsSync(join(COMPANY, 'hq', 'workflow.json')) && !seen.has('hq')) seen.set('hq', 'hq');
   return [...seen.entries()]
     .map(([name, source]) => ({ name, source }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// Resolve the on-disk directory of a named project (precedence: projects > examples > hq).
+// Resolve the on-disk directory of a named project (precedence: projects > examples).
 // Returns the absolute path, or null if the project doesn't exist / name is unsafe.
 async function resolveProjectDir(name) {
   if (!SAFE_PROJECT.test(name)) return null;
-  if (name === 'hq') {
-    try { await stat(join(COMPANY, 'hq', 'workflow.json')); return join(COMPANY, 'hq'); } catch { return null; }
-  }
   for (const base of ['projects', 'examples']) {
     const dir = join(COMPANY, base, name);
     try { await stat(join(dir, 'workflow.json')); return dir; } catch {}

@@ -1,8 +1,6 @@
-# Workflow Engine + HQ
+# Workflow Engine
 
 > **Engine** điều phối agent chạy full-local trên PowerShell — đọc `workflow.json` dạng **đồ thị điều khiển** (`nodes` + `edges` + `entry`), đi theo đồ thị bằng con trỏ đơn (single-cursor walk), gọi agent qua `claude -p`, ghép context bằng bridge, log + state. Hỗ trợ rẽ nhánh OR (router agent quyết), merge, loop (cycle có chặn `max_steps`).
->
-> **HQ** là bộ "thợ lắp" chạy *trên* engine: nhận yêu cầu user → chọn vai từ `catalog/` + pattern từ `patterns/` → sinh ra một **chi nhánh** (`workflow.json` + agents) → tự test (cấu trúc + trial thật) → tích luỹ trí nhớ. Engine là code cố định; HQ là một workflow chạy bằng chính engine đó.
 
 `pipeline` tuyến tính (v1) vẫn chạy nguyên: loader tự chuyển thành graph nội bộ → **một executor duy nhất** cho cả hai dạng. Không lưu toạ độ — layout tính lúc render.
 
@@ -16,15 +14,15 @@
 
 ---
 
-## Quickstart — 3 luồng
+## Quickstart — 2 luồng
 
-Mọi lệnh chạy từ `company/engine/`. Có **3 luồng** dùng engine, tách bạch theo mục tiêu:
+Mọi lệnh chạy từ `company/engine/`. Có **2 luồng** chính:
 
 ```powershell
 cd company/engine
 ```
 
-### Luồng 1 — chạy & soi một project con (demo/fixture có sẵn)
+### Luồng 1 — chạy & soi một project (demo/fixture có sẵn)
 
 ```powershell
 ./run.ps1 graph    hello              # 1. Xem đồ thị (node + cạnh) + xuất Mermaid     (cũ: viz)
@@ -36,25 +34,13 @@ cd company/engine
 
 Sau bước 3, run `hello` (2 node `a → b`) phải báo cả 2 lượt `done`, path `a → b`, in đường dẫn run dir. Chạy thật (gọi model qua `claude` CLI) — bỏ `-Mock`: `./run.ps1 run hello "câu hỏi thật" -Model claude-opus-4-7`.
 
-### Luồng 2 — chạy HQ (sinh chi nhánh thật)
+### Luồng 2 — dựng workflow mới (author)
 
-HQ là một workflow có **router** → cần `-Router` để steer dry-run gate (xem [§Lúc nào vào sandbox](#lúc-nào-vào-sandbox-lúc-nào-vào-projects)):
-
-```powershell
-./run.ps1 autobuild hq "Landing page thu email" -Router "coo:build;rg_gate:enough;tester:pass"        # dry-run gate, free  (cũ: e2e)
-./run.ps1 autobuild hq "Landing page thu email" -Router "coo:build;rg_gate:enough;tester:pass" -Real  # chạy thật → promote vào projects/
-```
-
-`autofix` (cũ: `e2efix`) là biến thể fix-loop: seed một branch hỏng → HQ patch → verify fail→pass → promote.
-
-### Luồng 3 — nối node (tạo workflow mới)
-
-3 cách dựng `workflow.json`, **không** lưu toạ độ (xem [§workflow.json](#workflowjson--đồ-thị-điều-khiển-không-toạ-độ)):
+2 cách dựng `workflow.json`, **không** lưu toạ độ (xem [§workflow.json](#workflowjson--đồ-thị-điều-khiển-không-toạ-độ)):
 
 ```powershell
-./run.ps1 build my-spec.json my-app   # (a) Builder deterministic: build-spec JSON → chi nhánh (copy vai + stamp pattern)
-./run.ps1 edit my-app                  # (b) TUI: thêm/xoá/đổi node, chọn agent, set input deps
-# (c) App Workflow Viewer — xem § "App — Workflow viewer" bên dưới
+./run.ps1 edit my-app    # (a) TUI: thêm/xoá/đổi node, chọn agent, set input deps (pipeline-v1)
+# (b) App Workflow Viewer — xem § "App — Workflow viewer" bên dưới (in-app edit, graph-format)
 ```
 
 ---
@@ -65,12 +51,7 @@ HQ là một workflow có **router** → cần `-Router` để steer dry-run gat
 ./run.ps1 <command> <project> [args]
 ```
 
-> **`hq` chỉ là MỘT project — không có lệnh "dành riêng cho hq".** Cái quyết định bạn thao tác với HQ hay project con **không phải tên lệnh, mà là `<project>` bạn truyền vào**. `hq` (ở `company/hq`) tự nó là một `workflow.json` 11 node — khác ở chỗ việc nó làm là *đẻ ra chi nhánh khác*; project con (`hello`, `landing-email`) là workflow lá, chạy nó chỉ thực thi pipeline của chính nó. Hệ quả:
-> - **Nhóm PROJECT** (`run`/`resume`/`graph`/`validate`/`check`/`trial`/`status`/`logs`/`edit`) — **generic, dùng cho cả hai**. `graph hello` xem đồ thị app lá; `graph hq` xem đồ thị nhà máy. Cùng lệnh, khác đối tượng.
-> - **`autobuild`/`autofix`** — 2 lệnh **duy nhất gắn chặt hq**: chạy nhà máy end-to-end để đẻ + promote một chi nhánh (`<project>` luôn là `hq`).
-> - **`build`** — đẻ chi nhánh **không qua hq**, nhận `<spec-file>` (không phải project).
-
-`<project>` nhận **tên gọn** (`hello`, `hq`) hoặc **path** (`examples/hello`) — engine resolve theo thứ tự: path nguyên trạng → `projects/<name>` (app thật) → `examples/<name>` (demo/fixture) → `company/<name>` (top-level, vd `hq`). ⚠ **Footgun (A-05)**: nếu sau khi `autobuild` promote ra `projects/<name>` mà cũng có `examples/<name>` trùng tên, tên gọn **ưu tiên `projects/`** — gọi dạng path (`examples/<name>`) để chỉ đích chính xác.
+`<project>` nhận **tên gọn** (`hello`) hoặc **path** (`examples/hello`) — engine resolve theo thứ tự: path nguyên trạng → `projects/<name>` (app thật) → `examples/<name>` (demo/fixture). ⚠ **Footgun (A-05)**: nếu có `projects/<name>` trùng tên `examples/<name>`, tên gọn **ưu tiên `projects/`** — gọi dạng path để chỉ đích chính xác.
 
 | Nhóm | Command | Cú pháp | Việc |
 |---|---|---|---|
@@ -82,98 +63,33 @@ HQ là một workflow có **router** → cần `-Router` để steer dry-run gat
 | | `logs` | `logs <proj> [node]` | Prompt + output từng lượt thăm (lọc 1 node nếu truyền) |
 | | `check` | `check <proj>` | **Tester tầng cấu trúc**: `validate` exit 0 → `run -Mock` done → mọi `output_key` non-empty (exit = số tiêu chí fail) |
 | | `trial` | `trial <proj> [-Model m]` | **Tester tầng trial**: tầng cấu trúc (mock) → copy vào sandbox cô lập → chạy **THẬT** → assert `trial[]` trên artifact |
-| **BUILD** | `build` | `build <spec-file> [<outName>]` | **Builder engine**: build-spec JSON → sinh chi nhánh (copy vai + stamp pattern + nối edge) |
-| | `autobuild` | `autobuild <proj> "<request>" [-Router s] [-Real] [-KeepSandbox]` | **Real-run harness HQ**: dry-run gate (free) → (`-Real`) sandbox → run thật → verify → promote |
-| | `autofix` | `autofix <proj> "<req>" -Seed <br> -Branch <n> [-Router s] [-Real]` | **Fix-loop harness**: seed branch hỏng → HQ patch → verify fail→pass → promote |
 | **AUTHOR** | `edit` | `edit <proj>` | TUI thêm/xoá/đổi thứ tự node, chọn agent, set input deps (pipeline-v1) |
 | | `save-graph` | `save-graph <proj> <candidate-file>` | Ghi + validate atomic (graph-format); PASS → commit; FAIL → restore + `{"ok":false,"errors":[]}` |
-| **Advanced** | `selftest` | `selftest [all]` | Chạy bộ test engine (3 script + 7 stamp + mem-demo); **exit = số mục fail** |
+| **Advanced** | `selftest` | `selftest [all]` | Chạy bộ test engine (7 stamp + mem-demo + approval-demo); **exit = số mục fail** |
 
 Không arg / `help` / `-h` / `--help` → in help đầy đủ.
 
-**Tương thích**: tên cũ vẫn chạy như **alias im lặng** (route thẳng tên mới, không in note) — `viz`→`graph`, `e2e`→`autobuild`, `e2efix`→`autofix`, `test`→`selftest`.
+**Tương thích**: tên cũ vẫn chạy như **alias im lặng** — `viz`→`graph`, `test`→`selftest`.
 
 - **Claude** dùng nhiều: `run`/`resume` (mock khi test), `validate`/`check`/`trial` (gate trước khi báo done), `status`+`logs` (kiểm tra). Non-interactive, exit code rõ ràng.
 - **User** dùng nhiều: `graph` (đọc đồ thị), `edit` (TUI tương tác — không hợp với Claude vì nhập tay).
-- **Đốt token**: `run`/`resume` không `-Mock`, `trial` (tầng 2 luôn thật), `autobuild`/`autofix` với `-Real`. Còn lại free.
-- **Xem output**: lúc chạy, `run` chỉ in `node 'x' → done (N chars)` — **không** in nội dung lên màn hình. Dùng `logs <proj> [node]` SAU đó để đọc prompt/output đầy đủ; hoặc đọc `<run>/events.ndjson` (mỗi dòng JSON chứa nội dung output đầy đủ — xem [§Human-in-the-loop](#human-in-the-loop-hitl)). *(Stream live → Phase F.)*
+- **Đốt token**: `run`/`resume` không `-Mock`, `trial` (tầng 2 luôn thật). Còn lại free.
+- **Xem output**: lúc chạy, `run` chỉ in `node 'x' → done (N chars)` — **không** in nội dung lên màn hình. Dùng `logs <proj> [node]` SAU đó để đọc prompt/output đầy đủ; hoặc đọc `<run>/events.ndjson` (mỗi dòng JSON chứa nội dung output đầy đủ — xem [§Human-in-the-loop](#human-in-the-loop-hitl)).
 - **Gate duyệt (`awaiting`)**: khi gặp node `approval` hoặc vi phạm diff-scope, engine **dừng** (exit 3) + in hướng dẫn resume. Thêm `-AutoApprove` để tự duyệt (dùng cho test/CI offline, không tương tác).
 
 ---
 
 ## Lúc nào vào `sandbox/`, lúc nào vào `projects/`?
 
-Đây là điểm hay nhầm. Có **3 nơi** artifact đi tới, tuỳ lệnh:
+Có **2 nơi** artifact đi tới, tuỳ lệnh:
 
 | Nơi | Là gì | Lệnh nào ghi vào đây | Project gốc bị đụng? |
 |---|---|---|---|
-| `<project>/.runs/<ts>/` | Lịch sử run **của chính project đó** | `run`, `resume` (kể cả khi chạy `hq`) | ✅ tại chỗ (ghi vào `.runs/` của nó) |
-| `projects/<name>/` | **Nhà cuối** của một chi nhánh đã sinh/đạt | `build` ghi **thẳng**; `autobuild`/`autofix` **promote** vào sau khi verify | — (tạo branch mới) |
-| `sandbox/<runid>/` | Bản **COPY tạm cô lập** để chạy thật rồi vứt | `trial` (tầng 2); `autobuild`/`autofix` với `-Real` | ❌ KHÔNG — gốc giữ sạch |
-
-Mô hình tư duy theo lệnh:
+| `<project>/.runs/<ts>/` | Lịch sử run **của chính project đó** | `run`, `resume` | ✅ tại chỗ (ghi vào `.runs/` của nó) |
+| `sandbox/<runid>/` | Bản **COPY tạm cô lập** để chạy thật rồi vứt | `trial` (tầng 2) | ❌ KHÔNG — gốc giữ sạch |
 
 - **`run` / `resume` / `graph` / `validate` / `check` / `status` / `logs` / `edit`** — thao tác **tại chỗ** trên project. Artifact (nếu có) vào `<project>/.runs/`. Không liên quan sandbox.
-- **`build <spec>`** — Builder deterministic, ghi **thẳng** một chi nhánh mới vào `projects/<name>/` (không qua sandbox).
 - **`trial <proj>`** — copy project vào `sandbox/<runid>/`, chạy **THẬT** ở đó, assert `trial[]`, rồi **teardown** (xoá sandbox). Project gốc không bị bẩn bởi run thật.
-- **`autobuild` / `autofix` với `-Real`** — copy `hq/` vào `sandbox/<runid>/`, **HQ chạy thật ngay trong sandbox** → Builder sinh chi nhánh tại `sandbox/<runid>/projects/<name>/` → verify (`validate`/`check`) → **promote** (copy) chi nhánh đạt ra `projects/<name>/` → teardown sandbox. (Không `-Real`: chỉ chạy dry-run gate mock, **không** đụng sandbox.)
-
-> Vì sao phải qua sandbox? Run thật + Builder ghi file là thao tác "bẩn". Cô lập trong `sandbox/` để `hq/` gốc luôn sạch; chỉ thứ đã **verify đạt** mới được promote ra `projects/`. `-KeepSandbox` giữ lại sandbox để soi artifact khi debug (mặc định teardown).
-
-### Ví dụ cụ thể — `autobuild` build một chi nhánh
-
-Giả sử muốn HQ tự dựng một landing page thu email. **Trước khi chạy**, thư mục sạch:
-
-```
-company/
-├── hq/              # graph HQ (nguồn — sẽ KHÔNG bị đụng)
-├── projects/        # rỗng
-└── sandbox/         # rỗng
-```
-
-Bước 1 — chạy dry-run gate (free, không token) để chắc graph đi tới terminal:
-
-```powershell
-./run.ps1 autobuild hq "Landing page thu email, có nút submit" -Router "coo:build;rg_gate:enough;tester:pass"
-# → chỉ mock: COO→…→record tới terminal OK. CHƯA đụng sandbox, CHƯA sinh file.
-```
-
-> **`-Router` là bắt buộc cho graph có router (A-24).** Cú pháp `"<node>:<label>;<node>:<label>;..."` (đa-spec ngăn bởi `;`; mỗi router 1 nhãn, hoặc `node:l1,l2` cho nhiều lượt). Gate chạy `-Mock`, mà ở mock router **không tự nghĩ ra nhãn** — phải khai path kỳ vọng để steer. `"coo:build;rg_gate:enough;tester:pass"` = path build-happy: COO chọn `build` → rg_gate `enough` → tester `pass` → terminal `record`. Thiếu `-Router` → router `coo` không khớp `when` nào → gate fail. Spec này **chỉ** tác động lên dry-run mock; khi `-Real`, router thật tự quyết theo output model. *(Heuristic suy RouterSpec happy-path từ graph → Phase C.)*
->
-> `hq` là project top-level (`company/hq`). Resolver tìm tên gọn theo thứ tự `projects/` → `examples/` → `company/` nên `hq` chạy được; vẫn có thể gọi dạng path `../hq`.
-
-Bước 2 — chạy thật (đốt token) bằng `-Real`:
-
-```powershell
-./run.ps1 autobuild hq "Landing page thu email, có nút submit" -Router "coo:build;rg_gate:enough;tester:pass" -Real
-```
-
-**Trong lúc chạy**, engine tự làm tuần tự:
-
-```
-1. dry-run gate (mock)         ✓ graph tới terminal
-2. copy hq/ → sandbox/20260528-153000/        (bản tạm cô lập)
-3. HQ chạy THẬT trong sandbox:
-      COO → researcher → … → CTO → Builder
-      Builder sinh chi nhánh → sandbox/20260528-153000/projects/landing-email/
-      Tester verify (validate + check)         ✓ pass
-4. promote: copy chi nhánh đạt → company/projects/landing-email/
-5. teardown: xoá sandbox/20260528-153000/
-```
-
-**Sau khi xong**, gốc vẫn sạch, chỉ có chi nhánh đạt nằm ở `projects/`:
-
-```
-company/
-├── hq/                       # vẫn y nguyên
-├── projects/
-│   └── landing-email/        # ← chi nhánh HQ vừa build, đã verify đạt
-│       ├── workflow.json
-│       └── agents/{pm,ux,frontend-developer,qa-functional}.md
-└── sandbox/                  # rỗng lại (đã teardown)
-```
-
-> Nếu verify **không đạt**, chi nhánh nằm lại trong sandbox và **không** promote — `projects/` vẫn rỗng. Thêm `-KeepSandbox` để giữ sandbox mà soi Builder đã sinh ra gì.
 
 ### Ví dụ — `trial` test một project có sẵn
 
@@ -184,16 +100,6 @@ company/
 # 1. tầng cấu trúc (mock, free): validate + run -Mock + output_key  ✓
 # 2. copy examples/loopy → sandbox/<runid>/ → chạy THẬT → assert trial[]  ✓
 # 3. teardown sandbox. examples/loopy gốc KHÔNG có .runs mới (chạy ở bản copy).
-```
-
-### Ví dụ — `build` ghi thẳng, không sandbox
-
-`build` là Builder deterministic (không LLM), nên ghi **thẳng** vào `projects/`, bỏ qua sandbox:
-
-```powershell
-./run.ps1 build my-spec.json my-app
-# → company/projects/my-app/{workflow.json, agents/*.md}  (copy vai catalog + stamp pattern)
-./run.ps1 validate my-app      # rồi kiểm tra như project thường
 ```
 
 ---
@@ -248,7 +154,7 @@ Engine **không có ngôn ngữ biểu thức**. Logic chọn cạnh nằm trong
 - Node `type:"router"`: engine **chuẩn hoá output** → nhãn = dòng không-trắng **cuối**, trim, lowercase.
 - Engine khớp nhãn với `when` của các cạnh ra. Khớp 1 → đi cạnh đó. Không khớp `when` nào → node **fail** (liệt kê `when` hợp lệ) → sửa rồi `resume`.
 
-> **`-Mock` trần KHÔNG lái router (A-01).** Mock chỉ echo output xác định, không sinh nhãn router. Project **có router** chạy `-Mock` mà không khai `ENGINE_MOCK_ROUTER` (hoặc `-Router` cho `autobuild`) → router không khớp `when` nào → fail. Phải set `$env:ENGINE_MOCK_ROUTER = 'coo:build;tester:pass'` để steer. Project tuyến tính (như `hello`) không có router → `-Mock` trần chạy thẳng.
+> **`-Mock` trần KHÔNG lái router (A-01).** Mock chỉ echo output xác định, không sinh nhãn router. Project **có router** chạy `-Mock` mà không khai `ENGINE_MOCK_ROUTER` → router không khớp `when` nào → fail. Phải set `$env:ENGINE_MOCK_ROUTER = 'tester:pass'` để steer. Project tuyến tính (như `hello`) không có router → `-Mock` trần chạy thẳng.
 
 Ví dụ chạy thử demo router 4 nhánh (`examples/branchy`):
 
@@ -293,31 +199,13 @@ model: claude-opus-4-7           # → --model (tier theo từng agent)
 
 ---
 
-## HQ — bộ lắp ráp chi nhánh
+## HQ — native team-of-agents
 
-HQ không phải engine mới; nó là một **workflow chạy bằng engine** (`hq/workflow.json`, 11 node, `entry=coo`, `max_steps=40`). Triết lý: **chất lượng = graph giàu tầng robustness**, không phải agent đặc biệt.
+HQ hiện là **native team-of-agents Claude Code** (`.claude/agents/hq-*.md` + `.claude/hq-master.md`), không còn là `workflow.json`. Builder build chi nhánh trực tiếp bằng Write/Edit — không đi qua engine. Engine + app là tool workflow **chi nhánh** đứng riêng.
 
-```
-COO (router build/fix/unclear) → researcher → rg_gate → clarify_gate
-   → Planner → CTO → Builder → Tester (router)
-        ├─ fail  → Builder        (do-verify loop)
-        ├─ replan→ Planner        (re-plan loop)
-        └─ pass  → record         (ghi memory, terminal thành công)
-   escalate-gate → escalate_report (terminal khi bí)
-```
+Xem `plan/hq-v2/phase-h/design.md` để biết kiến trúc HQ native team.
 
-| Vai HQ | Việc | Quyền ghi file |
-|---|---|---|
-| **COO** | Router phân loại request: `build` / `fix` / `unclear` | — |
-| **researcher** | Gom hiểu biết + memory → tóm tắt + `open_questions[]` | read-only |
-| **Planner** | **plan-as-data** (WHAT): mục tiêu + bước + tiêu chí xong | — |
-| **CTO** | **build-spec** (HOW): chọn vai catalog + pattern + nối edge + `trial[]` | — |
-| **Builder** | build-spec → `workflow.json` + copy vai + stamp pattern + scaffold | ✅ chỉ Builder |
-| **Tester** | Router: gọi checker (cấu trúc + trial) → `pass`/`fail`/`replan` + ghi memory | — |
-
-Hợp đồng dữ liệu: **plan-as-data** (Planner) → **build-spec** (CTO) → **`workflow.json`** (Builder). Chi tiết schema + validator: [`hq/build-spec.md`](hq/build-spec.md). Validate spec bằng `Test-PlanSchema`/`Test-BuildSpec` **trước khi** Builder ghi file (validate-trước-khi-build).
-
-### catalog/ — menu vai (input của CTO)
+### catalog/ — thư viện vai chi nhánh
 
 17 vai chi nhánh hand-authored (`catalog/*.md`), mỗi vai = system prompt + ranh giới theo template 5 mục (Một việc / Input / Trả ra / Không làm / Handoff): đầu-não (researcher, planner), Product (pm, ba), Design (ux, ui), Engineering (tech-lead, db-architect, api-developer, auth-engineer, frontend-developer, devops, mobile-ios/android/flutter), QA (qa-functional, qa-regression). Xem [`catalog/README.md`](catalog/README.md) — ma trận ranh giới chống đè.
 
@@ -411,16 +299,12 @@ Whitelist mặc định (vùng được phép đổi trong 1 run):
   spec.json          ← build-spec input
   .runs/             ← engine TỰ QUẢN: run artifacts (state/events/output_key txt)
   memory/            ← engine TỰ QUẢN: memory write (record node)
-Vi phạm = đụng NGOÀI 4 vùng trên (vd builder ghi hq/agents/, catalog/, hay ../).
+Vi phạm = đụng NGOÀI 4 vùng trên (vd builder ghi catalog/, hay ../).
 ```
 
 > Snapshot bọc **cả workflow** (không chỉ riêng node builder) nên `.runs/` + `memory/` mà engine tự sinh phải nằm trong whitelist — nếu không sẽ false-positive. Builder xoá `.runs/` *giữa* run đã bị bắt sớm hơn (tester/record fail → run fail trước cả diff-check).
 
 ---
-
-### E2E thật (`autobuild` / `autofix`)
-
-`engine/e2e.ps1`: dry-run gate (mock, xác nhận GRAPH tới terminal **trước khi** đốt token) → sandbox cô lập → run thật → verify (`validate`/`check`) → **kiểm diff-scope builder** → promote branch đạt vào `projects/`. `autofix` thêm fix-loop: seed branch hỏng → assert pre-fix `validate` FAIL → HQ patch thật → assert post-fix exit 0 + `file_changed` → promote.
 
 ---
 
@@ -479,7 +363,7 @@ node server.mjs      # → http://localhost:5179
 
 ### Tính năng viewer (Phase E)
 
-- **Chọn project** từ dropdown (hiển thị toàn bộ project có `workflow.json` trong `projects/`, `examples/`, `hq/`).
+- **Chọn project** từ dropdown (hiển thị toàn bộ project có `workflow.json` trong `projects/`, `examples/`).
 - **Vẽ graph tương tác**: 4 loại node (worker rect / router diamond ◇ / approval hexagon ⏸ / terminal); cạnh có hướng; nhãn `when` trên cạnh router; back-edge (loop) = dashed orange.
 - **Zoom / pan / kéo thả node** — scroll để zoom, kéo nền để pan, kéo node cá nhân để bố trí lại.
 - **Auto-layout dagre** mặc định (TB top-down). Nút **Reset layout** trên góc phải để quay về layout auto.
@@ -488,7 +372,7 @@ node server.mjs      # → http://localhost:5179
 
 ### Tính năng live log + run control + duyệt (Phase F)
 
-- **Ô request**: gõ task/ngữ cảnh cho run (vd "build a landing page with email signup"). **HQ cần cái này** để COO định tuyến đúng nhánh; mock bỏ qua. Enter = chạy luôn.
+- **Ô request**: gõ task/ngữ cảnh cho run (vd "build a landing page with email signup"). Router workflow đọc `{{user_request}}` để định tuyến; mock bỏ qua. Enter = chạy luôn.
 - **Nút ▶ Run (Mock)**: bấm → app spawn `run.ps1 run <proj> "<request>" -Mock` qua server, stream log live qua SSE.
 - **Log panel**: mỗi event hiện 1 dòng/khối — `node_output` hiện **nội dung output đầy đủ** (không chỉ "N chars"); `run_end` hiện trạng thái (done/failed/awaiting). Auto-scroll theo event mới. Nút **Clear** dọn log + dừng stream.
 - **Highlight node live**: node `running` (viền xanh + pulse) → `done` (xanh lá + ✓) → `awaiting` (tím + ⏸ + pulse) trên graph React Flow theo thứ tự walk thực tế.
@@ -512,7 +396,7 @@ Edit cấu trúc graph **ngay trong app** — chỉ cho project dạng **graph**
 - **Unsaved guard**: chuyển project khi có thay đổi chưa save → dialog xác nhận. Badge `✎ EDIT — unsaved changes` khi dirty.
 - **Coordinate-free** (bất biến #2): `workflow.json` chỉ chứa semantic (`nodes`/`edges`/`entry`/`max_steps`); toạ độ (kể cả node mới) → `.layout.json` qua `/api/layout`. `git diff workflow.json` sau drag = ZERO toạ độ.
 
-> **Giới hạn**: App chỉ chạy `run` (HQ + project con, mock mặc định). `autobuild`/`autofix` (E2E real, sandbox/promote) dùng CLI. Edit graph = chỉ dạng **graph-format** (`nodes`/`edges`); pipeline-v1 dùng CLI `run.ps1 edit` (TUI). Undo/redo nhiều bước: reload = discard pending.
+> **Giới hạn**: App chỉ chạy `run` (mock mặc định). Edit graph = chỉ dạng **graph-format** (`nodes`/`edges`); pipeline-v1 dùng CLI `run.ps1 edit` (TUI). Undo/redo nhiều bước: reload = discard pending.
 
 ### Bất biến
 
@@ -552,29 +436,26 @@ company/
 │   ├── validate.ps1     # graph validation; approval: không cần agent, ≥1 cạnh ra
 │   ├── check.ps1        # Tester tầng cấu trúc
 │   ├── sandbox.ps1      # Tester tầng trial + harness cô lập
-│   ├── spec.ps1         # Test-PlanSchema / Test-BuildSpec / Invoke-BuildSpec (lệnh build)
-│   ├── e2e.ps1          # Real-run harness HQ (autobuild/autofix) + Test-DiffScope (diff-scope guard)
-│   ├── test-runner.ps1  # Invoke-SelfTest (lệnh: selftest) — gom 3 script + 7 stamp + mem-demo + approval-demo (12 mục)
+│   ├── test-runner.ps1  # Invoke-SelfTest (lệnh: selftest) — 7 stamp + mem-demo + approval-demo (9 mục)
 │   ├── pattern.ps1      # Expand-Pattern (stamp fragment)
 │   ├── memory.ps1       # Get-Memory / Write-MemoryEntry
 │   ├── status.ps1       # status + logs viewer; hiện awaiting gate + prompt + choices
 │   ├── edit.ps1         # TUI
 │   └── lib/{json,log,claude}.ps1
-├── app/                 # App web (Phase E+F): React+Vite+Tailwind+React Flow+dagre
-│   ├── server.mjs       # Node http: serve dist/ + API projects/graph/layout (E) + run/events SSE/decision (F)
+├── app/                 # App web (Phase E+F+G): React+Vite+Tailwind+React Flow+dagre
+│   ├── server.mjs       # Node http: serve dist/ + API projects/graph/layout (E) + run/events SSE/decision (F) + workflow save-graph (G)
 │   ├── src/             # React: App·GraphView·RunLog·ApprovalPanel·RealConfirmDialog·nodes·layout
 │   └── package.json     # npm — npm run dev / npm run build / node server.mjs
-├── hq/                  # HQ graph: workflow.json (11 node) + agents/ + build-spec.md + skills.md
-├── catalog/             # 17 vai chi nhánh hand-authored (menu cho CTO)
+├── catalog/             # 17 vai chi nhánh hand-authored (thư viện vai tham khảo)
 ├── patterns/            # 6 fragment robustness
 ├── memory/              # Store trí nhớ HQ-global (mistakes/patterns/global)
-├── projects/            # App thật HQ build ra (gitignored — regen từ build-spec)
+├── projects/            # Chi nhánh build ra (gitignored — regen-được)
 ├── sandbox/             # Khu cô lập Tester tầng trial (gitignored — rỗng khi rảnh)
-├── examples/            # Demo + fixture + test scripts (hello, branchy, loopy, p-*, hq-*, *-tests.ps1)
+├── examples/            # Demo + fixture (hello, branchy, loopy, p-*, mem-demo, approval-demo, edit-demo)
 ├── information/         # Master design brief gốc
-└── plan/                # hq-build/{ROADMAP.md + phase-*/} (đợt build, DONE) + hq-improve/ (đợt cải thiện)
+└── plan/                # hq-build/ + hq-improve/ (DONE) + hq-v2/ (đang làm)
 ```
 
-**Trạng thái build**: toàn bộ Phase R / 0 / 1 / 2 / 3 / 4 / 5 / M đã ✅ DONE (xem [`plan/hq-build/ROADMAP.md`](plan/hq-build/ROADMAP.md)). **Đợt hq-improve (A→G) ✅ ĐÓNG** — Phase B (CLI ergonomics) + D (HITL+events) + E+F+G (App: viewer → live-log → in-app edit). App web React+Vite+Tailwind+React Flow: xem graph tương tác + bấm Run → log live + node highlight + duyệt HITL + **sửa cấu trúc graph validate-gated**. Xem §App bên trên.
+**Trạng thái build**: Phase hq-build (R/0/1/2/M/3/4/5) + hq-improve (A→G) ✅ DONE. hq-v2 Phase 0 + H.0–H.3 ✅ DONE; Phase H.4+ đang làm. App web React+Vite+Tailwind+React Flow: xem graph tương tác + bấm Run → log live + node highlight + duyệt HITL + **sửa cấu trúc graph validate-gated**. Xem §App bên trên.
 
-Bộ test offline (mock, không đốt token): `examples/hq-tests.ps1` (per-agent HQ), `examples/hq-graph-tests.ps1` (8 path HQ graph), `examples/e2e-harness-tests.ps1` (harness round-trip). Chạy gom tất cả qua **`./run.ps1 selftest`** (3 script + 7 `p-*/stamp.ps1` + mem-demo + approval-demo done-gate; **12 mục tổng**; exit = số mục fail).
+Bộ test offline (mock, không đốt token): **`./run.ps1 selftest`** (7 `p-*/stamp.ps1` + mem-demo + approval-demo done-gate; **9 mục tổng**; exit = số mục fail).

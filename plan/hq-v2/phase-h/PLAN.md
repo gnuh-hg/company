@@ -1,6 +1,8 @@
 # PLAN — Phase H: HQ thành team-of-agents native Claude Code (CD-1)
 
-> Sau toàn bộ pipeline: HQ không còn chạy qua `hq/workflow.json` (DAG cố định). HQ = **một team native Claude Code** — lead orchestrator điều phối ĐỘNG bằng reasoning + spawn teammate (`.claude/agents/*.md`) qua tính năng **agent teams** (TeamCreate), teammate giao tiếp SendMessage + Task queue chung, gọi **engine ps1 như tool** để dựng/chạy/test **chi nhánh thật**. Engine + app tái định vị thành **CHỈ-lo-workflow-chi-nhánh**. Done = 1 request thật chạy trọn research→plan→build→test→record hoàn toàn động, đo token giảm so với HQ-workflow cũ.
+> Sau toàn bộ pipeline: HQ không còn chạy qua `hq/workflow.json` (DAG cố định). HQ = **một team native Claude Code** — lead orchestrator điều phối ĐỘNG bằng reasoning + spawn teammate (`.claude/agents/*.md`) qua tính năng **agent teams** (TeamCreate), teammate giao tiếp SendMessage + Task queue chung bằng **văn xuôi tự nhiên**, builder **build deliverable TRỰC TIẾP** (Write/Edit). Engine ps1 + app là **tool workflow-chi-nhánh đứng riêng**, HQ KHÔNG bắt buộc đi qua. Done = 1 request thật chạy trọn research→plan→build→test→record hoàn toàn động, đo token giảm so với HQ-workflow cũ.
+>
+> **⚠️ REVISE 2026-06-02 (Q2 reframe):** bản đầu chốt "builder ghi file QUA engine `autobuild`/`autofix`" + "planner plan-as-data JSON" + "cto build-spec cho `run.ps1 build`". User chỉ ra teammate **lậm form workflow cũ** (xuất JSON cho engine parse trong khi không engine nào parse). **Đảo:** build TRỰC TIẾP, giao tiếp prose, bỏ build-spec/workflow.json/plan-as-data khỏi luồng HQ. Legacy `hq/` + `examples/hq-*` + 2 test script **đã XÓA**; selftest 12→10. Các session H.4–H.6 + skill H.7 viết lại theo đây. Xem `design.md` §Revise + §5/§7/§8.
 
 ---
 
@@ -9,16 +11,16 @@
 - **Vì sao chia nhiều session:** đây là tái thiết kế kiến trúc, không phải patch. Phải (1) khoá reframe + bố cục `.claude/` trước khi đẻ agent (H.0), (2) dựng nền team (flag + memory + playbook + hooks), (3) **mỗi teammate/skill = 1 session** (ràng buộc chất lượng CD-1 — "mỗi session đẻ 1 agent/skill"), (4) hợp nhất + chạy thật end-to-end. Gộp lại sẽ ẩu + mất chất lượng từng agent.
 - **Quyết định đã chốt (user 2026-06-02, input cho H):**
   - **Orchestration = native team (TeamCreate)** kiểu leafnote — lead + teammate bền vững + SendMessage + Task queue + `teams/playbook.md` (vòng đời + anti-pattern + issue queue). KHÔNG dùng subagent one-shot.
-  - **Builder ghi file = qua engine** — builder teammate shell `run.ps1 autobuild/autofix` → engine lo Copy-ToSandbox + validate-gate + Promote-Branch (Phase 5). Teammate KHÔNG tự Write/Edit file chi nhánh.
-  - **Teammate gọi engine trực tiếp** — builder/tester tự shell `run.ps1` khi cần; lead điều phối, không làm bottleneck.
-  - **Memory → `.claude/memory/`** kiểu leafnote (`context/mistakes/patterns/global.md`) cho memory của HQ-team. **Lưu ý kiến trúc (chốt ở H.0):** engine branch memory store `company/memory/` + `<project>/memory/` **GIỮ NGUYÊN** (engine `memory.ps1` bất biến) — đây là store của *chi nhánh*. `.claude/memory/` là store *làm việc của HQ-team* (tách bạch, không đụng engine).
-  - **Legacy HQ-workflow** (`hq/workflow.json` + `examples/hq-*` + `hq-graph-tests` trong selftest): **giữ làm tham chiếu** trong suốt đợt build (nguồn chuyển hoá agent); **thêm 1 task DỌN ở cuối roadmap hq-v2** (sau Phase L) — không xoá trong Phase H.
+  - **~~Builder ghi file = qua engine~~ → REVISE Q2: Builder build TRỰC TIẾP** — builder teammate Write/Edit file deliverable vào `projects/<name>/` + Bash chạy build/test. KHÔNG `run.ps1 autobuild/autofix`, KHÔNG workflow.json. (Lý do đảo: engine-build là form workflow cũ; HQ team là team code thực thụ, build trực tiếp.)
+  - **~~Teammate gọi engine trực tiếp~~ → REVISE Q2: HQ KHÔNG đi qua engine để build.** Engine `run.ps1` + app là tool workflow-chi-nhánh đứng riêng; chỉ gọi nếu request CỤ THỂ là dựng/sửa workflow pipeline (ngoại lệ). Tester verify bằng check của chính deliverable (test/build/lint exit-code), KHÔNG `run.ps1 check/trial`.
+  - **Memory → `.claude/memory/`** kiểu leafnote (`context/mistakes/patterns/global.md`) cho memory của HQ-team. Engine branch store `company/memory/` + `<project>/memory/` **GIỮ NGUYÊN** (engine `memory.ps1` bất biến). `.claude/memory/` là store *làm việc của HQ-team* (tách bạch).
+  - **~~Legacy giữ làm tham chiếu~~ → REVISE Q2: Legacy ĐÃ XÓA** (`hq/` + `examples/hq-*` + `hq-tests.ps1` + `hq-graph-tests.ps1`, git rm 2026-06-02) vì là nguồn lậm form. `engine/test-runner.ps1` de-wire 2 script (selftest 12→10), `e2e-harness-tests` repoint `loopy`. `engine/e2e.ps1` (autobuild/autofix) giữ code nhưng vestigial (hardcode 'record', HQ không dùng).
 - **Ràng buộc external / tiền đề kỹ thuật:**
   - Agent teams **experimental** — bật bằng `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (settings.json `env`), cần Claude Code **≥ v2.1.32** (verify đầu H.1; nếu thiếu → blocker, báo user nâng cấp).
   - Teammate def = subagent `.claude/agents/<name>.md`: frontmatter `tools`+`model` được honor, body nối vào system prompt. **`skills`+`mcpServers` trong frontmatter teammate BỊ BỎ QUA** → skill phải đặt project-scope `.claude/skills/` (dùng chung mọi teammate). Teammate đọc CLAUDE.md + project context, KHÔNG kế thừa history lead.
   - Limitations: 1 team/lúc · no nested team (chỉ lead spawn) · permission set lúc spawn (teammate kế thừa lead) · no resume in-process teammate. Plan phải sống với các giới hạn này.
-- **Out of scope (phase khác trong hq-v2):** tối ưu token engine chi nhánh + handoff-output (Phase I), rẽ-nhánh bơm-choices (Phase J), HITL pause/ask engine (Phase K), app UX branch-only (Phase L). H KHÔNG đụng engine executor (`engine/workflow.ps1`/`bridge.ps1`/...) — chỉ GỌI engine như tool. Mọi sửa engine để dành J/K.
-- **Regression bất biến mỗi session chạm filesystem:** `./run.ps1 validate hello` exit 0 · `./run.ps1 run hello "x" -Mock` done · `./run.ps1 selftest` PASS. (H không sửa engine → 3 cái này phải nguyên trạng suốt phase; `git diff engine/` RỖNG mọi session.)
+- **Out of scope (phase khác trong hq-v2):** tối ưu token engine chi nhánh + handoff-output (Phase I), rẽ-nhánh bơm-choices (Phase J), HITL pause/ask engine (Phase K), app UX branch-only (Phase L). H KHÔNG đụng engine **executor** (`engine/workflow.ps1`/`bridge.ps1`/`graph.ps1`/...). Mọi sửa engine logic để dành J/K.
+- **Regression mỗi session chạm filesystem:** `./run.ps1 validate hello` exit 0 · `./run.ps1 run hello "x" -Mock` done · `./run.ps1 selftest` PASS (**nay 10/10** sau de-wire). **Ngoại lệ engine-diff (chỉ session reframe Q2 2026-06-02):** session này CÓ sửa `engine/test-runner.ps1` (de-wire 2 script) + `engine/spec.ps1` (2 comment dangling) — executor (`workflow/bridge/graph/validate/...`) KHÔNG đụng. Các session H sau: `git diff engine/` RỖNG lại.
 
 ---
 
@@ -84,34 +86,34 @@ Vòng đời HQ-native cần điều phối ĐỘNG (không DAG): `request → r
 
 ## Phase H-B — Teammate (mỗi session 1 agent)
 
-**Mục tiêu**: chuyển hoá từng vai HQ thành teammate def chất lượng cao, nguồn = `hq/agents/<role>.md` + template 5-mục, thêm **giao thức team** (SendMessage/TaskUpdate/shutdown-response) + frontmatter `tools`/`model` đúng vai.
+**Mục tiêu**: viết từng teammate def chất lượng cao theo **format team agent thực thụ** (tham chiếu leafnote `.claude/agents/teams/`). Vai trò + ranh giới định nghĩa ở `design.md` §2 (KHÔNG còn nguồn `hq/agents/*` — đã xóa). **Nguyên tắc chống lậm form cũ:** teammate giao tiếp **văn xuôi tự nhiên** — KHÔNG JSON/plan-as-data/build-spec; chỉ builder ghi file (Write/Edit), build TRỰC TIẾP không qua engine.
 
 > **Tiêu chí chất lượng chung mỗi teammate (STOP gate từng session phải đạt):**
-> (a) frontmatter hợp lệ: `name`, `description`, `tools` (đúng quyền — read-only cho researcher/planner/cto/tester; builder thêm Bash để shell engine), `model` (tier hợp lý: router/gọn → rẻ); (b) body theo template 5-mục (Một việc/Input/Trả ra/Không làm/Handoff) ĐÃ dịch sang ngữ cảnh team (không còn ngôn ngữ node/output_key của workflow); (c) ≥3 bullet giao thức team (ack-cùng-turn qua SendMessage · TaskUpdate in_progress→completed · shutdown_response đúng protocol — bài học từ leafnote issue-queue); (d) self-review checklist tick trong CHECKPOINT. **Chưa spawn thật ở H-B** (spawn = đốt token, dồn về H.10) — gate H-B = authored + đạt checklist.
+> (a) frontmatter hợp lệ: `name`, `description`, `tools` (đúng quyền — read-only cho researcher/planner/cto/tester; builder thêm Bash để shell engine), `model` (tier hợp lý); (b) body viết như **team agent thực thụ** — KHÔNG dùng template 5-mục node (Một việc/Input/Trả ra/Không làm/Handoff): phải có (1) mission 1 câu, (2) "Đọc đầu phiên" có thứ tự, (3) "Workflow chính" các bước cụ thể, (4) "Anti-patterns", (5) "Output format" template trả lead, (6) "Quality gate" self-check, (7) **"Trong TeamCreate mode"** đầy đủ (spawn-ack · TaskGet · TaskUpdate in_progress → completed · SendMessage khi xong · shutdown_request · verify-done-from-prior-session); (c) TeamCreate mode section có ≥6 bullet covering toàn bộ lifecycle (spawn/brief/work/done/shutdown/verify); (d) self-review checklist tick trong CHECKPOINT. **Chưa spawn thật ở H-B** (spawn = đốt token, dồn về H.10) — gate H-B = authored + đạt checklist.
 
 ### Session H.2 — `researcher` teammate
 - Scope: soạn `.claude/agents/hq-researcher.md` từ `hq/agents/researcher.md` (gom request + memory → tóm tắt + open_questions; read-only). Tools read-only (Read/Grep/Glob + WebSearch nếu cần) + đọc `.claude/memory/`.
 - STOP gate: tiêu chí chất lượng chung (a)–(d) đạt; file pass `claude` parse (frontmatter YAML hợp lệ — verify bằng đọc lại, không cần spawn).
 - Output: `.claude/agents/hq-researcher.md`.
 
-### Session H.3 — `planner` teammate
-- Scope: soạn `.claude/agents/hq-planner.md` từ `hq/agents/planner.md` (WHAT — plan-as-data; re-plan khi tester fail). Đọc memory + research output qua SendMessage/Task.
-- STOP gate: (a)–(d) đạt; nêu rõ giao thức nhận verdict fail → re-plan (động, không loop-edge).
+### Session H.3 — `planner` teammate ✅ (đã soạn lại form prose 2026-06-02)
+- Scope: `.claude/agents/hq-planner.md` (WHAT — kế hoạch **văn xuôi markdown** Goal/Steps/Done-criteria; **KHÔNG plan-as-data JSON**; re-plan khi tester fail). Đọc memory + research qua SendMessage/Task.
+- STOP gate: (a)–(d) đạt; giao thức nhận verdict fail → re-plan (động, không loop-edge); done-criteria có cách kiểm khách quan.
 - Output: `.claude/agents/hq-planner.md`.
 
 ### Session H.4 — `cto` teammate
-- Scope: soạn `.claude/agents/hq-cto.md` từ `hq/agents/cto.md` (HOW — build-spec; chọn vai từ `catalog/`). Read-only; xuất build-spec cho builder.
-- STOP gate: (a)–(d) đạt; build-spec contract (tham chiếu `hq/build-spec.md`) giữ nguyên hình dạng để `run.ps1 build` ăn được.
+- Scope: soạn `.claude/agents/hq-cto.md` (HOW — **thiết kế kỹ thuật văn xuôi**: cấu trúc file, cách tiếp cận, công nghệ; tham khảo `catalog/` TÙY CHỌN). Read-only; **KHÔNG build-spec JSON, KHÔNG lắp workflow.json**. Đầu ra cho builder = thiết kế prose đủ để builder ghi file.
+- STOP gate: (a)–(d) đạt; thiết kế là văn xuôi cho builder đọc (không JSON ceremony); nêu rõ builder sẽ Write/Edit trực tiếp theo thiết kế.
 - Output: `.claude/agents/hq-cto.md`.
 
-### Session H.5 — `builder` teammate (engine sandbox/promote)
-- Scope: soạn `.claude/agents/hq-builder.md` từ `hq/agents/builder.md`. **Ghi file qua engine**: builder nhận build-spec → shell `run.ps1 autobuild <spec>` (sandbox→run real→validate→promote) hoặc `autofix` cho vòng sửa. Tools = Read + **Bash** (để shell engine) — KHÔNG cần Write/Edit trực tiếp file chi nhánh (engine builder agent ghi). Nêu rõ ranh giới "không đụng `engine/*.ps1`".
-- STOP gate: (a)–(d) đạt; hợp đồng engine-call cụ thể (lệnh + cách đọc `Write-E2EResult`/exit); khẳng định không tự Write file chi nhánh.
+### Session H.5 — `builder` teammate (build TRỰC TIẾP)
+- Scope: soạn `.claude/agents/hq-builder.md`. **Ghi file deliverable TRỰC TIẾP**: nhận thiết kế CTO → Write/Edit file vào `projects/<name>/` + Bash chạy build/cài deps. Tools = Read + **Write + Edit + Bash**. **KHÔNG `run.ps1 autobuild/autofix/build`, KHÔNG workflow.json**. Ranh giới: không đụng `engine/*.ps1`.
+- STOP gate: (a)–(d) đạt; quy ước output location (`projects/<name>/`); khẳng định build trực tiếp (không engine-build); báo tester cách chạy/kiểm khi xong.
 - Output: `.claude/agents/hq-builder.md`.
 
-### Session H.6 — `tester` teammate (engine check/trial + ghi memory)
-- Scope: soạn `.claude/agents/hq-tester.md` từ `hq/agents/tester.md`. Chạy `run.ps1 check`/`trial` lấy exit code (gate khách quan); verdict pass/fail; ghi bài học vào `.claude/memory/` (qua skill `hq-memory` H.8) khi xong. Tools = Read + Bash.
-- STOP gate: (a)–(d) đạt; gate khách quan dựa exit-code engine (không phán cảm tính); đường ghi memory rõ.
+### Session H.6 — `tester` teammate (check khách quan của deliverable + ghi memory)
+- Scope: soạn `.claude/agents/hq-tester.md`. Chạy **check của chính deliverable** (test suite / build / lint / quan sát hành vi) lấy exit-code/kết quả (gate khách quan); in `CHECK_RESULT: pass|fail (...)`; ghi bài học vào `.claude/memory/` (qua skill `hq-memory` H.8). Tools = Read + Bash. **KHÔNG `run.ps1 check/trial`** (engine không trong luồng HQ).
+- STOP gate: (a)–(d) đạt; gate khách quan dựa exit-code/output của deliverable (không phán cảm tính); đường ghi memory rõ.
 - Output: `.claude/agents/hq-tester.md`.
 
 **Phase H-B gate**: 5 teammate def tồn tại, mỗi cái đạt checklist (a)–(d); `git diff engine/` rỗng; regression 3-lệnh PASS.
@@ -122,10 +124,10 @@ Vòng đời HQ-native cần điều phối ĐỘNG (không DAG): `request → r
 
 **Mục tiêu**: đóng gói "cách gọi engine" + "đọc/ghi memory" thành skill project-scope dùng chung (vì frontmatter `skills` của teammate bị bỏ qua → phải project-scope).
 
-### Session H.7 — Skill `engine-ops`
-- Scope: `.claude/skills/engine-ops/SKILL.md` gộp scaffold/patch/diagnose/run-test từ `hq/skills.md`: bảng lệnh `run.ps1 build|autobuild|autofix|run|check|trial|validate` + cách đọc kết quả (`.runs/`, `events.ndjson`, exit code, JSON result) + ranh giới (chỉ gọi, không sửa engine; outName `projects/<name>` relative cwd). Tham chiếu README engine.
-- STOP gate: SKILL.md có frontmatter hợp lệ + bảng ≥6 lệnh + mục "đọc kết quả" + mục "ranh giới"; mọi lệnh nêu đều TỒN TẠI trong `run.ps1` (verify bằng `run.ps1 --help`/đọc dispatcher).
-- Output: `.claude/skills/engine-ops/SKILL.md`.
+### Session H.7 — Skill `build-verify` (thay `engine-ops`)
+- Scope: `.claude/skills/build-verify/SKILL.md` — quy ước **build deliverable TRỰC TIẾP + verify khách quan** (thay `engine-ops` cũ vốn gói cách-gọi-engine, vô nghĩa sau Q2): nơi ghi (`projects/<name>/`, gitignored regen-được), cách cấu trúc deliverable, cách tester verify khách quan (chạy test/build/lint của deliverable, đọc exit-code, in `CHECK_RESULT: pass|fail`). Ranh giới: builder Write/Edit trực tiếp, KHÔNG đụng `engine/*.ps1`, KHÔNG `run.ps1 build/autobuild`.
+- STOP gate: SKILL.md frontmatter hợp lệ + mục "nơi ghi + cấu trúc" + mục "verify khách quan" + mục "ranh giới"; KHÔNG tham chiếu lệnh engine-build (đã loại khỏi luồng HQ).
+- Output: `.claude/skills/build-verify/SKILL.md`.
 
 ### Session H.8 — Skill `hq-memory`
 - Scope: `.claude/skills/hq-memory/SKILL.md` cho report/read: đọc `.claude/memory/{context,mistakes,patterns,global}.md` đầu task + append bài học cuối task (delimiter date-stamped, cap N — mirror schema engine memory nhưng cho store HQ-team). Phân biệt rõ với engine branch memory (`company/memory/`).
@@ -141,12 +143,12 @@ Vòng đời HQ-native cần điều phối ĐỘNG (không DAG): `request → r
 **Mục tiêu**: viết "bộ não" lead (playbook đầy đủ) rồi chứng minh end-to-end thật.
 
 ### Session H.9 — Orchestration playbook đầy đủ
-- Scope: đổ nội dung `company/.claude/teams/playbook.md` (từ skeleton H.1): (1) When-to-team (khi nào lead spawn vs tự làm; size 3-5 teammate); (2) Lifecycle (spawn→assign Task→SendMessage→shutdown_response→cleanup; bài học leafnote: ack-cùng-turn, không silent-complete); (3) Anti-pattern (lead-DIY vượt ngưỡng, scope-drift, stale-context — port từ leafnote queue codes); (4) Issue-queue (file `company/.claude/team-issues-queue.md` + format); (5) Engine-as-tool contract (trỏ skill `engine-ops`); (6) Memory protocol (trỏ skill `hq-memory`). Cập nhật orchestration doc (`hq-master.md`/CLAUDE.md §HQ-native) trỏ playbook + roster + flow động.
-- STOP gate: playbook đủ 6 mục; flow request→research→plan→build→test→record mô tả ĐỘNG (không DAG) + ánh xạ rõ teammate nào làm bước nào + engine-call ở build/test; `team-issues-queue.md` tạo (header + format). Regression PASS.
+- Scope: đổ nội dung `company/.claude/teams/playbook.md` (từ skeleton H.1): (1) When-to-team (khi nào lead spawn vs tự làm; size 3-5 teammate); (2) Lifecycle (spawn→assign Task→SendMessage→shutdown_response→cleanup; bài học leafnote: ack-cùng-turn, không silent-complete); (3) Anti-pattern (lead-DIY vượt ngưỡng, scope-drift, stale-context — port từ leafnote queue codes); (4) Issue-queue (file `company/.claude/team-issues-queue.md` + format); (5) Build-deliverable contract (trỏ skill `build-verify`; builder Write/Edit trực tiếp, tester verify khách quan; **KHÔNG engine-build**); (6) Memory protocol (trỏ skill `hq-memory`). Cập nhật orchestration doc (`hq-master.md`) trỏ playbook + roster + flow động.
+- STOP gate: playbook đủ 6 mục; flow request→research→plan→build→test→record mô tả ĐỘNG (không DAG) + ánh xạ rõ teammate nào làm bước nào + build-trực-tiếp ở build/verify-khách-quan ở test; `team-issues-queue.md` tạo (header + format). Regression PASS.
 - Output: `playbook.md` đầy đủ + `team-issues-queue.md` + orchestration doc.
 
 ### Session H.10 — Done-gate: chạy thật end-to-end (USER-GATE, ĐỐT TOKEN)
-- Scope: với 1 request thật nhỏ (vd "landing page thu email" — tái dùng phạm vi `landing-email`), lead bật team → research → plan → cto → builder `autobuild` dựng+chạy **chi nhánh thật** qua engine → tester `check`/`trial` → record `.claude/memory/`, **hoàn toàn động** (không workflow.json). Thu `usage` token mỗi teammate (best-effort) + so sánh định tính/định lượng với HQ-workflow cũ (baseline ước lượng H.0). Ghi kết quả + 1 vòng "chạy thử" xác nhận từng teammate/skill hoạt động.
+- Scope: với 1 request thật nhỏ (vd "landing page thu email"), lead bật team → research → plan → cto (thiết kế prose) → builder **Write/Edit dựng deliverable TRỰC TIẾP** vào `projects/<name>/` → tester chạy **check khách quan của deliverable** (test/build/lint) → record `.claude/memory/`, **hoàn toàn động** (không workflow.json, không engine-build). Thu `usage` token mỗi teammate (best-effort) + so sánh với HQ-workflow cũ (baseline ước lượng H.0). Ghi kết quả + 1 vòng "chạy thử" xác nhận từng teammate/skill hoạt động.
 - STOP gate = **Outcome cuối** (checklist done-gate tất cả tick). **User gate trước khi chạy** (đốt token — xác nhận như D-C1/Phase 5).
 - Output: branch thật trong `projects/` + báo cáo token trước/sau + memory entry + CHECKPOINT done.
 
@@ -156,18 +158,18 @@ Vòng đời HQ-native cần điều phối ĐỘNG (không DAG): `request → r
 
 ## Outcome cuối
 
-- HQ chạy như **native team**: 1 request → lead điều phối động → research/plan/cto/build/test/record qua teammate + skill + engine, KHÔNG dùng `hq/workflow.json`.
+- HQ chạy như **native team**: 1 request → lead điều phối động → research/plan/cto/build/test/record qua teammate + skill, build TRỰC TIẾP (KHÔNG engine-build, KHÔNG `hq/workflow.json`).
 - **Done-gate (checklist đo được):**
-  - [ ] `design.md` chốt đủ 9 mục; mọi "cần làm rõ" ROADMAP §H trả lời.
+  - [ ] `design.md` chốt đủ 9 mục theo Q2; mọi "cần làm rõ" ROADMAP §H trả lời.
   - [ ] Flag `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` bật; CC ≥ v2.1.32 verified.
-  - [ ] 5 teammate def `.claude/agents/hq-{researcher,planner,cto,builder,tester}.md`, mỗi cái đạt checklist (a)–(d).
-  - [ ] 2 skill project-scope (`engine-ops` + `hq-memory`), mọi lệnh tham chiếu thật.
-  - [ ] `.claude/memory/` 4 file + store HQ-team tách bạch `company/memory/` (engine `memory.ps1` BẤT BIẾN — `git diff engine/` rỗng).
+  - [ ] 5 teammate def `.claude/agents/hq-{researcher,planner,cto,builder,tester}.md` **form prose (KHÔNG JSON ceremony)**, mỗi cái đạt checklist (a)–(d).
+  - [ ] 2 skill project-scope (`build-verify` + `hq-memory`), mọi quy ước/lệnh tham chiếu thật.
+  - [ ] `.claude/memory/` 4 file + store HQ-team tách bạch `company/memory/` (engine `memory.ps1` BẤT BIẾN).
   - [ ] `playbook.md` đủ 6 mục + flow động + `team-issues-queue.md`.
-  - [ ] **Chạy thật**: lead dựng+chạy 1 chi nhánh thật qua engine, test qua engine (exit-code gate), record memory — hoàn toàn động.
+  - [ ] **Chạy thật**: lead dựng + verify 1 deliverable TRỰC TIẾP (builder Write/Edit, tester check khách quan của deliverable), record memory — hoàn toàn động.
   - [ ] Báo cáo token: team-native vs HQ-workflow cũ cho thấy giảm (hoặc giải thích nếu không).
-  - [ ] Legacy `hq/workflow.json` còn nguyên (tham chiếu) + hàng "DỌN legacy cuối roadmap" đã ghi vào ROADMAP hq-v2.
-  - [ ] Regression 3-lệnh PASS ở session cuối; ROADMAP hq-v2 bảng tiến độ Phase H → ✅.
+  - [ ] Legacy `hq/` + `examples/hq-*` + 2 test script **đã XÓA**; selftest 10/10; ghi nhận §Dọn-legacy ROADMAP.
+  - [ ] Regression (validate hello + run hello -Mock + selftest 10/10) PASS ở session cuối; ROADMAP hq-v2 bảng tiến độ Phase H → ✅.
 
 ---
 
@@ -176,3 +178,4 @@ Vòng đời HQ-native cần điều phối ĐỘNG (không DAG): `request → r
 | Date | Change | Lý do |
 | --- | --- | --- |
 | 2026-06-02 | Initial | Tạo từ ROADMAP hq-v2 Phase H. Chốt (user): orchestration=native team TeamCreate · builder ghi-file qua engine sandbox/promote · teammate gọi engine trực tiếp · memory→`.claude/memory/` (tách store engine branch) · legacy giữ tham chiếu + dọn cuối roadmap. Nền tài liệu: code.claude.com/docs agent-teams (flag experimental, teammate=subagent def, skills project-scope, hooks gate). |
+| 2026-06-02 | **REVISE Q2 (reframe giữa H-B)** | User chỉ ra teammate lậm form workflow cũ (hq-planner xuất JSON plan-as-data vô nghĩa). Đảo 3 quyết định cũ: (1) builder build TRỰC TIẾP Write/Edit, KHÔNG engine-build; (2) teammate giao tiếp prose, KHÔNG JSON/build-spec; (3) legacy `hq/`+`examples/hq-*`+2 test script XÓA (không giữ tham chiếu). Sửa: intro · Context locked-decisions · §H-B intro + H.3–H.6 · §H-C H.7 (`engine-ops`→`build-verify`) · H.9/H.10 · Outcome checklist · regression invariant (selftest 12→10, engine-diff ngoại lệ session này). Soạn lại `hq-researcher`+`hq-planner` form prose. Xem `design.md` §Revise. |

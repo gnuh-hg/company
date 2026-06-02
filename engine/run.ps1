@@ -8,13 +8,10 @@
 #   validate  <proj>                                  → validate.ps1  (Test-Workflow)
 #   status    <proj>                                  → status.ps1 (Show-Status, state v2)
 #   logs      <proj> [node]                           → status.ps1 (Show-Logs, theo lượt thăm)
-#   build     <spec-file> [<outName>]                 → spec.ps1      (Invoke-BuildSpec)
-#   autobuild <proj> "<req>" [-Router s] [-Real]      → e2e.ps1       (Invoke-E2E)
-#   autofix   <proj> "<req>" -Seed <br> -Branch <n>   → e2e.ps1       (Invoke-E2EFix)
 #   edit      <proj>                                  → edit.ps1      (Invoke-Edit, TUI)
 #   selftest  [all]                                   → test-runner.ps1 (Invoke-SelfTest)
 #
-# Alias tương thích (tên cũ vẫn chạy): viz→graph, e2e→autobuild, e2efix→autofix, test→selftest.
+# Alias tương thích (tên cũ vẫn chạy): viz→graph, test→selftest.
 # <project> nhận tên gọn ('hello') hoặc path ('examples/hello'); resolve về thư mục thật.
 
 Set-StrictMode -Version Latest
@@ -27,8 +24,6 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $here 'status.ps1')
 . (Join-Path $here 'check.ps1')
 . (Join-Path $here 'sandbox.ps1')
-. (Join-Path $here 'spec.ps1')
-. (Join-Path $here 'e2e.ps1')
 . (Join-Path $here 'test-runner.ps1')
 . (Join-Path $here 'save.ps1')
 
@@ -51,11 +46,6 @@ function Show-Help {
         '  check    <proj>                                  Tester tầng cấu trúc (validate+run-Mock+output-key)',
         '  trial    <proj> [-Model m]                       Tester tầng trial THẬT (assert trial[])',
         '',
-        'BUILD — HQ sinh/sửa chi nhánh:',
-        '  build     <spec-file> [<outName>]                Builder deterministic: spec → chi nhánh',
-        '  autobuild <proj> "<req>" [-Router s] [-Real]     HQ chạy thật → verify → promote    (cũ: e2e)',
-        '  autofix   <proj> "<req>" -Seed <br> -Branch <n>  Fix-loop branch hỏng → verify      (cũ: e2efix)',
-        '',
         'AUTHOR — soạn workflow:',
         '  edit       <proj>                                TUI thêm/xoá/đổi node + agent + deps',
         '  save-graph <proj> <candidate-file>             Ghi graph candidate (validate-gated, reject-on-invalid)',
@@ -64,7 +54,7 @@ function Show-Help {
         '  selftest [all]                                   Chạy bộ test engine (script+stamp+mem-demo)  (cũ: test)',
         '',
         'Không arg / help / -h / --help → in trợ giúp này.',
-        'Tương thích: tên cũ (viz/e2e/e2efix/test) vẫn chạy như alias.',
+        'Tương thích: tên cũ (viz/test) vẫn chạy như alias.',
         '',
         'Ví dụ:',
         '  ./run.ps1 run hello "ping" -Mock',
@@ -164,7 +154,7 @@ function Invoke-Dispatch {
     $command = $RawArgs[0].ToLower()
     # Alias tương thích (B.2): map tên-cũ → tên-mới, im lặng (route thẳng, không in note).
     # Sau bước này mọi nhánh switch + allowlist chỉ cần biết tên mới.
-    $aliasMap = @{ 'viz' = 'graph'; 'e2e' = 'autobuild'; 'e2efix' = 'autofix'; 'test' = 'selftest' }
+    $aliasMap = @{ 'viz' = 'graph'; 'test' = 'selftest' }
     if ($aliasMap.ContainsKey($command)) { $command = $aliasMap[$command] }
     $rest    = if ($RawArgs.Count -gt 1) { $RawArgs[1..($RawArgs.Count - 1)] } else { @() }
     $parsed  = Split-DispatchArgs $rest
@@ -172,7 +162,7 @@ function Invoke-Dispatch {
 
     if ($command -in @('help', '-h', '--help')) { Show-Help; return 0 }
 
-    if ($command -notin @('run', 'resume', 'graph', 'validate', 'check', 'trial', 'build', 'autobuild', 'autofix', 'status', 'logs', 'edit', 'save-graph', 'selftest')) {
+    if ($command -notin @('run', 'resume', 'graph', 'validate', 'check', 'trial', 'status', 'logs', 'edit', 'save-graph', 'selftest')) {
         Write-Host "Command không hợp lệ: '$command'" -ForegroundColor Red
         Write-Host ''
         Show-Help
@@ -188,32 +178,6 @@ function Invoke-Dispatch {
         Write-Host "Command '$command' cần <project>." -ForegroundColor Red
         Show-Help
         return 2
-    }
-
-    # 'build' nhận <spec-file> (không phải project) → xử lý trước Resolve-ProjectDir.
-    if ($command -eq 'build') {
-        $specFile = $pos[0]
-        if (-not (Test-Path -LiteralPath $specFile)) {
-            Write-Host "build: không tìm thấy spec-file '$specFile'" -ForegroundColor Red
-            return 2
-        }
-        $spec    = Read-Json $specFile
-        $outName = if ($pos.Count -ge 2) { $pos[1] } else { [string](Get-Prop $spec 'name') }
-        if ([string]::IsNullOrWhiteSpace($outName)) {
-            Write-Host "build: spec thiếu 'name' và không truyền <outName>" -ForegroundColor Red
-            return 2
-        }
-        # outName là path (có / hoặc \) → dùng nguyên trạng; ngược lại → projects/<outName>.
-        $outDir = if ($outName -match '[\\/]') { $outName } else { Join-Path $here '../projects' $outName }
-        try {
-            $result = Invoke-BuildSpec $spec $outDir
-        }
-        catch {
-            Write-Host "✗ Build thất bại: $($_.Exception.Message)" -ForegroundColor Red
-            return 1
-        }
-        Write-Host "✓ Build xong → $result" -ForegroundColor Green
-        return 0
     }
 
     $projectDir = Resolve-ProjectDir $pos[0]
@@ -325,40 +289,6 @@ function Invoke-Dispatch {
             Write-Host ''
             $trialResult = Invoke-Trial $projectDir $trials -Model $parsed.Model
             return (Write-TrialResult $trialResult "trial-real: $($pos[0])")
-        }
-        'autobuild' {
-            # Real-run harness (Phase 5): dry-run gate (free) → -Real để đốt token + sandbox→promote.
-            if ($pos.Count -lt 2) {
-                Write-Host "autobuild cần: autobuild <project> ""<request>"" [-Router spec] [-Real]" -ForegroundColor Red
-                return 2
-            }
-            try {
-                $result = Invoke-E2E $projectDir $pos[1] -RouterSpec $parsed.Router -Real:$parsed.Real -KeepSandbox:$parsed.KeepSandbox
-            }
-            catch {
-                Write-Host "✗ E2E thất bại: $($_.Exception.Message)" -ForegroundColor Red
-                return 1
-            }
-            return (Write-E2EResult $result)
-        }
-        'autofix' {
-            # Fix-loop harness (Phase 5.4): seed branch hỏng → dry-run gate → (-Real) HQ fix patch → verify fail→pass.
-            if ($pos.Count -lt 2) {
-                Write-Host "autofix cần: autofix <project> ""<request>"" -Seed <broken-branch> -Branch <name> [-Router s] [-Real]" -ForegroundColor Red
-                return 2
-            }
-            if ([string]::IsNullOrWhiteSpace($parsed.Seed) -or [string]::IsNullOrWhiteSpace($parsed.Branch)) {
-                Write-Host "autofix cần -Seed <broken-branch-dir> + -Branch <name>" -ForegroundColor Red
-                return 2
-            }
-            try {
-                $result = Invoke-E2EFix $projectDir $pos[1] -SeedBranchDir $parsed.Seed -BranchName $parsed.Branch -RouterSpec $parsed.Router -Real:$parsed.Real -KeepSandbox:$parsed.KeepSandbox
-            }
-            catch {
-                Write-Host "✗ E2E-fix thất bại: $($_.Exception.Message)" -ForegroundColor Red
-                return 1
-            }
-            return (Write-E2EResult $result)
         }
         'status' { Show-Status $projectDir; return 0 }
         'logs'   {

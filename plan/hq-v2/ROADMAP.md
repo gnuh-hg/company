@@ -14,6 +14,8 @@
 
 **Đợt này ĐẢO mục đó cho HQ (user chốt 2026-06-02):** HQ chuyển sang **team-of-agents native Claude Code** (subagents + skills, giống leafnote). Engine ps1 **KHÔNG bị bỏ** — nó được **tái định vị thành executor CHỈ-cho-workflow-chi-nhánh**. Lý do user: workflow cho HQ vừa cứng nhắc vừa tốn token (mỗi node = 1 `claude -p` độc lập, re-gửi system prompt + context tích luỹ, không chia sẻ/cache giữa node). "Chỉ cần workflow cho chi nhánh thôi." Xem **CD-1**.
 
+> **⚠️ AMEND 2026-06-02 (giữa Phase H, Q2 reframe):** bản CD-1 đầu ghi "HQ gọi engine như tool (`run.ps1 autobuild/...`) để **dựng/chạy chi nhánh**". Khi build teammate, user phát hiện chúng **lậm form workflow cũ** (hq-planner xuất JSON plan-as-data cho engine parse — nhưng không engine nào parse trong team native). **Đảo clause đó:** HQ team **build deliverable TRỰC TIẾP** (builder Write/Edit), giao tiếp **văn xuôi** (KHÔNG build-spec/plan-as-data/workflow.json). Engine `run.ps1` + app vẫn là **tool workflow-chi-nhánh đứng riêng** nhưng HQ **KHÔNG bắt buộc đi qua** để build. Legacy `hq/`+`examples/hq-*`+test script đã XÓA (§Dọn-legacy). Phần "HQ=native team" của CD-1 GIỮ NGUYÊN; chỉ "engine-là-builder-của-HQ" bị gỡ.
+
 ---
 
 ## Nền tảng đã có (KHÔNG build lại)
@@ -51,18 +53,42 @@
 
 > CD = Core Decision (KHÔNG phải Phase; phase là H–L).
 
-- **CD-1. HQ = team-of-agents native Claude Code.** HQ = orchestrator (lead) + **subagents** (`company/.claude/agents/`) + **skills** (`company/.claude/skills/`), điều phối ĐỘNG bằng reasoning (không DAG cố định). Engine ps1 + app **tái định vị thành CHỈ-lo-workflow-chi-nhánh**; HQ gọi engine như một **tool** (`run.ps1 autobuild/run/...`) để dựng/chạy chi nhánh. `hq/agents/*.md` (headless) + `hq/skills.md` (bảng) là **nguồn để chuyển hoá** sang subagent/skill CC. Router/gate node của HQ (coo/rg_gate/clarify_gate/escalate_gate) **tan vào reasoning của orchestrator** (CC hỏi user / chọn nhánh natively). **Nhịp build: mỗi session = 1 subagent HOẶC 1 skill** (đảm bảo chất lượng — đúng ý user). Lợi token: session chia sẻ + prompt caching thay cho N lần `claude -p` rời rạc.
+- **CD-1. HQ = team-of-agents native Claude Code.** HQ = orchestrator (lead) + **subagents** (`company/.claude/agents/`) + **skills** (`company/.claude/skills/`), điều phối ĐỘNG bằng reasoning (không DAG cố định). Router/gate node của HQ (coo/rg_gate/clarify_gate/escalate_gate) **tan vào reasoning của orchestrator** (CC hỏi user / chọn nhánh natively). **Nhịp build: mỗi session = 1 subagent HOẶC 1 skill** (đảm bảo chất lượng — đúng ý user). Lợi token: session chia sẻ + prompt caching thay cho N lần `claude -p` rời rạc.
+  - **AMEND Q2 (2026-06-02):** ~~HQ gọi engine như tool (`autobuild`) để dựng/chạy chi nhánh~~ + ~~`hq/agents/*` là nguồn chuyển hoá~~ → **builder build deliverable TRỰC TIẾP** (Write/Edit, KHÔNG engine-build); teammate giao tiếp **văn xuôi** (KHÔNG JSON/build-spec/plan-as-data). Engine + app vẫn là tool workflow-chi-nhánh đứng riêng, HQ không bắt buộc đi qua. `hq/agents/*` đã XÓA (vai trò định nghĩa ở `phase-h/design.md` §2, không còn "chuyển hoá từ node cũ").
 - **CD-2. Rẽ nhánh = engine bơm choices + chọn-có-validate + retry** (cho engine chi nhánh). Engine đọc cạnh ra của node router → **bơm tập nhãn hợp lệ vào prompt lúc chạy** ("chọn đúng MỘT: { … }") → agent chọn → engine **validate đúng tập cạnh thật** → sai thì **hỏi lại 1 lần** rồi mới fail. Nhãn = nguồn-sự-thật-duy-nhất từ graph, agent KHÔNG hardcode trong `.md` (đúng ý "agent biết node kế, đọc theo code, chủ động chọn"). Mock-path (`ENGINE_MOCK_ROUTER`) bất biến.
 - **CD-3. HITL = pause-policy gộp vào node agent.** Mỗi node agent có chính sách dừng `pause: none | always | ask`: `none` chạy thẳng; `always` luôn dừng cho người duyệt (= node `approval` hiện tại, tái dùng hạ tầng `awaiting` Phase D); `ask` = "tùy tình huống" — agent tự quyết lúc chạy có cần hỏi user không, nếu cần → engine pause **`awaiting_input`** (trạng thái MỚI) → chờ **trả lời free-text** → tiêm vào context → chạy tiếp. Dùng chung surface/event với approval; app thêm ô trả lời (Phase L). (Áp cho engine chi nhánh; trong HQ-native, hỏi-user là việc CC làm sẵn.)
 
-**Hệ quả cần nhớ:** sau CD-1, **app + engine phục vụ CHI NHÁNH**, không phải HQ. App default project nên đổi khỏi `hq` (Phase L). Số phận `hq/workflow.json` + `examples/hq-*` + `hq-graph-tests` (legacy workflow HQ): giữ-làm-tham-chiếu hay gỡ — quyết trong Phase H.
+**Hệ quả cần nhớ:** sau CD-1 (+ AMEND Q2), **app + engine là tool workflow-chi-nhánh đứng riêng**, HQ không đi qua để build. App default project đổi khỏi `hq` — **thực tế đã tự đổi** sau khi xóa `hq/` (App.jsx fallback `list[0]`; chính thức hoá ở Phase L). Số phận `hq/workflow.json` + `examples/hq-*` + `hq-graph-tests` (legacy workflow HQ): **ĐÃ GỠ** trong Phase H (Q2 reframe) — xem §Dọn-legacy.
 
 ---
 
 ## Các phase (mỗi phase = 1 long-plan)
 
+### Phase 0 — Dọn sạch hq-workflow (ƯU TIÊN, sinh từ Q2 reframe 2026-06-02)
+> **Định nghĩa "dọn dẹp" (user chốt 2026-06-02):** dọn **TOÀN BỘ những gì liên quan hq-workflow** — không chỉ `hq/` (đã xóa), mà cả **lệnh pwsh + harness + spec + README + app special-case**. Mục tiêu cuối: `company/` chỉ còn (a) HQ **native team** (`.claude/`) + (b) engine **branch-workflow GENERIC** (run/validate/graph/check/trial/edit/save-graph + executor + app viewer). KHÔNG còn cỗ máy chạy DAG-HQ-cũ (build-spec / autobuild / autofix / e2e).
+>
+> Tách thành phase riêng vì: (1) đụng **engine executor-adjacent** (dispatcher `run.ps1` + `e2e.ps1` + `spec.ps1` + `test-runner.ps1`) — KHÁC quy ước "H không đụng engine"; (2) nhiều file (README, app, CLAUDE.md); làm inline trong 1 chat reframe quá rối.
+
+- **✅ Đã làm sớm (chat reframe Q2 2026-06-02):** xóa `hq/` + `examples/hq-*` + `hq-tests.ps1` + `hq-graph-tests.ps1`; de-wire selftest 12→10; repoint `e2e-harness-tests`→`examples/loopy`; re-author `hq-researcher`/`hq-planner` form prose; sửa plan/design/CLAUDE/hq-master/playbook; comment `spec.ps1`.
+- **Dọn gì (còn lại — scope phase này):**
+  - **Lệnh pwsh gắn chặt HQ:** gỡ `autobuild`/`autofix` (alias `e2e`/`e2efix`) + `engine/e2e.ps1` (`Invoke-E2E`/`Invoke-E2EFix` hardcode terminal `'record'` — README ghi rõ "2 lệnh **duy nhất gắn chặt hq**"). Gỡ `build` (`<spec-file>`) + `engine/spec.ps1` (`Test-PlanSchema`/`Test-BuildSpec`/`Invoke-BuildSpec` — build-spec/plan-as-data là data-contract của HQ-workflow).
+  - **Dispatcher `run.ps1`:** gỡ entry + alias + Show-Help + allowlist (`run.ps1:175`) cho `build`/`autobuild`/`autofix`/`e2e`/`e2efix`.
+  - **selftest (`test-runner.ps1`):** nếu gỡ `e2e.ps1` → gỡ `e2e-harness-tests` (10→9) hoặc tách giữ phần sandbox/diff-scope generic nếu còn dùng.
+  - **Fixtures:** `examples/broken-web` (chỉ phục vụ autofix fix-loop) → gỡ.
+  - **README:** viết lại — bỏ "3 luồng quickstart HQ" + `autobuild`/`autofix`/`build`/build-spec; chỉ còn luồng branch-engine generic.
+  - **App:** gỡ `hq` special-case (`server.mjs:117/128`, `App.jsx:39/226`) — nhánh chết sau khi xóa `hq/`.
+  - **Docs:** `CLAUDE.md` file-map (gỡ/ghi-chú hàng `e2e.ps1`/`spec.ps1`/`broken-web` khi xóa); ROADMAP §Dọn-legacy fold vào phase này.
+- **Cần làm rõ (CHỐT trước khi chạy phase):**
+  - **`build`/`spec.ps1`/build-spec:** xóa hẳn (là data-contract HQ-workflow) HAY giữ làm engine-authoring generic (scaffold branch từ spec — dùng `catalog/`+`patterns/`, KHÔNG hardcode `'record'`)?
+  - **`catalog/` (17 vai):** xóa (dựng FOR hq-CTO lắp pipeline) HAY giữ làm thư viện role tái dùng (branch author + `hq-cto` tham khảo)?
+  - **`patterns/` + `pattern.ps1` (Expand-Pattern):** xóa (chỉ `Invoke-BuildSpec` dùng) HAY giữ làm robustness-fragment cho branch authoring (còn demo `examples/p-*` trong selftest)?
+  - **`Test-DiffScope`/sandbox (`e2e.ps1` vs `sandbox.ps1`):** `trial` dùng `sandbox.ps1` (Copy-ToSandbox) → giữ; `Test-DiffScope` chỉ e2e harness dùng → xóa cùng `e2e.ps1`?
+- **Phụ thuộc:** độc lập H-teammate (khác lớp). Nên chạy **sớm** để engine surface gọn trước khi I/J/K/L tối ưu/sửa engine chi nhánh.
+- **Done-gate:** `run.ps1` không còn lệnh hq-workflow (help + allowlist sạch); `grep -ri 'build-spec|autobuild|Invoke-E2E' engine/ README.md` rỗng (trừ `plan/` lịch sử); selftest pass (số mục mới); app không còn `hq` branch; regression generic (validate/run/check/trial/graph/edit/save-graph + run -Mock) PASS; CLAUDE.md/README phản ánh đúng surface còn lại.
+
 ### Phase H — HQ thành team-of-agents native (issue 1, CD-1)
-- **Mục tiêu:** HQ điều phối động bằng Claude Code subagents + skills, không còn DAG cố định; gọi engine chi nhánh như tool. Mỗi session đẻ 1 subagent hoặc 1 skill chất lượng cao.
+> **AMEND Q2 (2026-06-02):** mục tiêu + "cần làm rõ" gốc dưới đây viết theo bản đầu (engine-là-builder-của-HQ). Quyết-định thực-thi đã đảo (build TRỰC TIẾP, không engine-build) — nguồn-sự-thật hiện hành là `phase-h/PLAN.md` + `phase-h/design.md` (§Revise). Giữ block dưới làm lịch sử.
+- **Mục tiêu:** HQ điều phối động bằng Claude Code subagents + skills, không còn DAG cố định; ~~gọi engine chi nhánh như tool~~ → **build deliverable trực tiếp** (Q2). Mỗi session đẻ 1 subagent hoặc 1 skill chất lượng cao.
 - **Xây gì:**
   - **H.0 — Thiết kế orchestration + bố cục `.claude/`** (session đầu, KHÓA reframe trước khi đẻ agent): lead orchestrator điều phối thế nào; map `hq/agents/{coo,researcher,planner,cto,builder,tester,...}` + 5 gate → tập subagent CC + logic orchestrator; map `hq/skills.md` (scaffold/patch/diagnose/run-test/report) → `.claude/skills/<name>/SKILL.md` gọi lệnh engine sẵn có; memory `company/memory/` giữ nguyên hay chuyển `.claude/memory/`; HQ gọi engine ra sao (`autobuild`/`run`/`autofix` + đọc `.runs/`/`events.ndjson`); số phận legacy `hq/workflow.json`.
   - **H.1..H.n — mỗi session 1 subagent/skill:** soạn từng subagent (researcher → planner → cto → builder → tester …) + từng skill, kèm cách tự-kiểm chất lượng (dùng engine `validate`/`check`/`trial` của chi nhánh làm gate khách quan, không để LLM phán cảm tính — giữ tinh thần Tester máy-kiểm-được của hq-build).
@@ -115,6 +141,8 @@
 ```
 CD-1 / CD-2 / CD-3 (đã chốt 2026-06-02)
    │
+   ├─► Phase ⓿ (Dọn hq-workflow: engine surface gọn) ──► nên xong TRƯỚC I/J/K/L
+   │
    ├─► Phase H.0 (khoá reframe: engine=branch-only, bố cục .claude/) 
    │      └─► Phase H.1..n (subagent + skill, 1/session)  ───────────────┐
    │                                                                     │
@@ -125,7 +153,8 @@ CD-1 / CD-2 / CD-3 (đã chốt 2026-06-02)
    └────────────────────────────────────────────────────────┘
 ```
 
-- **H.0 đi đầu** (khoá reframe engine=branch-only mà J/K/L dựa vào). H.1.. (build HQ team) chạy **song song** với engine work J/K/I (khác lớp: `.claude/` vs engine ps1).
+- **Phase ⓿ độc lập H-teammate** (khác lớp: engine surface vs `.claude/`); nên chạy **sớm** để I/J/K/L tối ưu/sửa trên engine đã gọn (không còn `e2e`/`build-spec`).
+- **H.0 đi đầu** (khoá reframe engine=branch-only mà J/K/L dựa vào). H.1.. (build HQ team) chạy **song song** với engine work ⓿/J/K/I (khác lớp: `.claude/` vs engine ps1).
 - **J trước/cùng I** (handoff-output cần agent-biết-đích của J). Đo token baseline (đầu I) làm sớm được.
 - **K độc lập J** (đều build trên Phase D infra).
 - **L sau cùng** (cần J+K để phản ánh UI + H.0 để biết branch-only).
@@ -137,7 +166,8 @@ CD-1 / CD-2 / CD-3 (đã chốt 2026-06-02)
 | Phase | Long-plan | Trạng thái |
 |---|---|---|
 | CD-1/CD-2/CD-3 (cross-cutting) | — | ✅ CHỐT (user 2026-06-02): HQ native team / rẽ-nhánh bơm-choices / HITL pause-policy |
-| H — HQ team-of-agents native (#1) | `plan/hq-v2/phase-h/` | 🟡 Long-plan ĐÃ SOẠN (2026-06-02) — 5 sub-phase / 11 session, bắt đầu H.0 (`design.md`). Chốt (user): orchestration=native team TeamCreate · builder ghi-file qua engine sandbox/promote · teammate gọi engine trực tiếp · memory→`.claude/memory/` (tách store engine branch) · legacy giữ tham chiếu + dọn cuối roadmap (xem §Dọn legacy). Chưa thực thi |
+| ⓿ — Dọn sạch hq-workflow (ƯU TIÊN) | `plan/hq-v2/phase-0/` | ✅ DONE (2026-06-02). Đã xoá e2e.ps1/spec.ps1/broken-web/e2e-harness-tests; gỡ build/autobuild/autofix khỏi run.ps1; xoá hq special-case app; selftest 10→9; README/CLAUDE.md/ROADMAP cập nhật. Xem `phase-0/CHECKPOINT.md`. |
+| H — HQ team-of-agents native (#1) | `plan/hq-v2/phase-h/` | 🟡 ĐANG LÀM — H.0–H.3 xong (design.md + nền + researcher/planner). **REFRAME Q2 (2026-06-02):** teammate lậm form workflow cũ → đảo: build TRỰC TIẾP (không engine-build) · giao tiếp prose (không JSON/build-spec) · legacy `hq/`+`examples/hq-*`+2 test script XÓA NGAY (không chờ cuối roadmap) · selftest 12→10 · `engine-ops`→`build-verify` · soạn lại researcher+planner. Tiếp: H.4 cto (thiết kế prose). Xem `design.md`/`PLAN.md` §Revise |
 | I — Tối ưu token chi nhánh (#2) | `plan/hq-v2/phase-i/` | 📋 Chưa làm — gồm ⭐ handoff-output (khoá với J) |
 | J — Rẽ nhánh chủ động (CD-2) | `plan/hq-v2/phase-j/` | 📋 Chưa làm |
 | K — HITL pause-policy + hỏi-user (#3, CD-3) | `plan/hq-v2/phase-k/` | 📋 Chưa làm |
@@ -145,15 +175,18 @@ CD-1 / CD-2 / CD-3 (đã chốt 2026-06-02)
 
 ---
 
-## Dọn legacy (task cuối đợt — chốt user 2026-06-02)
+## Dọn legacy — ĐÃ LÀM SỚM trong Phase H (Q2 reframe, 2026-06-02)
 
-Sau CD-1, HQ không còn chạy qua `hq/workflow.json`. Trong suốt Phase H–L, các artifact workflow-HQ cũ được **GIỮ làm tham chiếu** (nguồn chuyển hoá agent + đối chiếu). **Cuối roadmap hq-v2** (sau Phase L), làm 1 task DỌN:
+> Bản đầu định "giữ tham chiếu, dọn sau Phase L". Q2 reframe quyết XÓA NGAY vì legacy là nguồn gây teammate lậm form workflow cũ.
 
-- Gỡ `examples/hq-graph-tests.ps1` + `examples/hq-tests.ps1` khỏi `selftest` (giảm mục).
-- Archive/xoá `hq/workflow.json` + `hq/workflow.mmd` + `examples/hq-*` (per-agent mock fixtures) khi đã có team-native thay thế.
-- Cập nhật `company/CLAUDE.md` bản đồ file (bỏ hàng legacy) + README.
+**✅ Đã làm (git rm 2026-06-02):**
+- `hq/workflow.json` + `hq/workflow.mmd` + `hq/agents/*` (11 node) + `hq/build-spec.md` + `hq/skills.md`.
+- `examples/hq-coo|hq-cto|hq-planner|hq-tester/` (per-agent mock fixtures).
+- `examples/hq-tests.ps1` + `examples/hq-graph-tests.ps1`.
+- De-wire `engine/test-runner.ps1`: gỡ 2 script khỏi `selftest` → **12 mục còn 10** (`e2e-harness-tests` giữ, repoint fixture `hq/`→`examples/loopy`).
+- Sửa 2 comment dangling trong `engine/spec.ps1` (trỏ `hq/build-spec.md` đã xóa).
 
-(KHÔNG làm trong Phase H — chỉ ghi nhận để cuối đợt thực thi.)
+**✅ ĐÃ XONG TOÀN BỘ — xem `plan/hq-v2/phase-0/CHECKPOINT.md`.**
 
 ---
 

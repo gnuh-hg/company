@@ -36,7 +36,7 @@ export default function App() {
       .then(r => r.json())
       .then(list => {
         setProjects(list);
-        const def = list.find(p => p.name === 'hq') ?? list[0];
+        const def = list[0];
         if (def) setSelected(def.name);
       })
       .catch(() => setLoadErr('Could not load project list.'));
@@ -223,7 +223,7 @@ export default function App() {
             {projects.map(p => (
               <option key={p.name} value={p.name}>
                 {p.name}
-                {p.source !== 'hq' ? ` (${p.source})` : ''}
+                {p.source ? ` (${p.source})` : ''}
               </option>
             ))}
           </select>

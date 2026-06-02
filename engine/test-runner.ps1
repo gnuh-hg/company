@@ -1,8 +1,11 @@
 # test-runner.ps1 — surface gom bộ test ENGINE (Phase B.3, lệnh `run.ps1 selftest`).
 #
-# CHỈ gom + đếm + báo (D-B3): chạy 3 test script + 7 stamp + mem-demo done-gate →
-# in PASS/FAIL từng mục + bảng tổng → exit = số mục fail (đồng quy ước check/validate).
+# CHỈ gom + đếm + báo (D-B3): 7 stamp + mem-demo done-gate +
+# approval-demo done-gate → in PASS/FAIL từng mục + bảng tổng → exit = số mục fail.
 # Mock-only, 0 token. KHÔNG đụng engine executor (workflow/graph/validate).
+#
+# hq-v2 Phase 0 (de-wire e2e harness): gỡ 'e2e-harness-tests' (dot-source e2e.ps1 đã xóa) →
+# 10 mục cũ còn 9 (7 stamp + mem-demo + approval-demo).
 #
 # CC-c (Phase C.6): stamp ASSERT NỘI DUNG node id (prefix kỳ vọng + không còn '__P__').
 # CC-c (Phase C.7): mem-demo ASSERT "run2 ≠ run1" — so output worker (work.txt) 2 run; run2 đọc
@@ -91,9 +94,9 @@ function Clear-ApprovalDemoArtifacts {
 function Invoke-SelfTest {
     <#
     .SYNOPSIS
-        Chạy bộ test engine: 3 test script (subprocess) + 7 p-*/stamp.ps1 (subprocess) +
+        Chạy bộ test engine: 7 p-*/stamp.ps1 (subprocess) +
         mem-demo done-gate (2-run -Mock inline) + approval-demo done-gate (pause→resume→done inline).
-        In PASS/FAIL từng mục + bảng tổng.
+        In PASS/FAIL từng mục + bảng tổng. 9 mục tổng.
     .OUTPUTS [int] số mục FAIL (0 = tất cả pass).
     #>
     param([string[]]$Pos)   # [all] hiện không phân nhóm — luôn chạy hết (B surface).
@@ -104,21 +107,9 @@ function Invoke-SelfTest {
 
     $items = [System.Collections.Generic.List[object]]::new()
 
-    Write-Host "selftest — bộ test engine (script + stamp + mem-demo). Mock-only, 0 token." -ForegroundColor Cyan
+    Write-Host "selftest — bộ test engine (stamp + mem-demo + approval-demo). Mock-only, 0 token." -ForegroundColor Cyan
 
-    # 1) 3 test script (mỗi script tự `exit $fails`) ----------------------------
-    Write-Host ''
-    Write-Host '── Test scripts ──'
-    foreach ($s in @('hq-tests', 'hq-graph-tests', 'e2e-harness-tests')) {
-        $path = Join-Path $examples "$s.ps1"
-        & $pwshExe -NoProfile -File $path *> $null
-        $code = $LASTEXITCODE
-        $ok   = ($code -eq 0)
-        $items.Add([pscustomobject]@{ Name = "script/$s"; Pass = $ok; Detail = "exit=$code" })
-        Write-SelfTestLine "script/$s" $ok "exit=$code"
-    }
-
-    # 2) 7 stamp wrapper (mỗi stamp ghi workflow.json deterministic, exit 0) ------
+    # 1) 7 stamp wrapper (mỗi stamp ghi workflow.json deterministic, exit 0) ------
     Write-Host ''
     Write-Host '── Pattern stamps ──'
     $stampDirs = @(Get-ChildItem -LiteralPath $examples -Directory -Filter 'p-*' | Sort-Object Name)
