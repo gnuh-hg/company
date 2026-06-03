@@ -1,7 +1,8 @@
 # test-runner.ps1 — surface gom bộ test ENGINE (Phase B.3, lệnh `run.ps1 selftest`).
 #
 # CHỈ gom + đếm + báo (D-B3): 7 stamp + mem-demo done-gate +
-# approval-demo done-gate → in PASS/FAIL từng mục + bảng tổng → exit = số mục fail.
+# approval-demo done-gate + branchy 2-part protocol (J.4) →
+# in PASS/FAIL từng mục + bảng tổng → exit = số mục fail.
 # Mock-only, 0 token. KHÔNG đụng engine executor (workflow/graph/validate).
 #
 # hq-v2 Phase 0 (de-wire e2e harness): gỡ 'e2e-harness-tests' (dot-source e2e.ps1 đã xóa) →
@@ -95,8 +96,9 @@ function Invoke-SelfTest {
     <#
     .SYNOPSIS
         Chạy bộ test engine: 7 p-*/stamp.ps1 (subprocess) +
-        mem-demo done-gate (2-run -Mock inline) + approval-demo done-gate (pause→resume→done inline).
-        In PASS/FAIL từng mục + bảng tổng. 9 mục tổng.
+        mem-demo done-gate (2-run -Mock inline) + approval-demo done-gate (pause→resume→done inline) +
+        branchy 2-part protocol (route/payload split, J.4).
+        In PASS/FAIL từng mục + bảng tổng. 10 mục tổng.
     .OUTPUTS [int] số mục FAIL (0 = tất cả pass).
     #>
     param([string[]]$Pos)   # [all] hiện không phân nhóm — luôn chạy hết (B surface).
@@ -185,6 +187,44 @@ function Invoke-SelfTest {
     $items.Add([pscustomobject]@{ Name = 'approval-demo/done-gate'; Pass = $adOk; Detail = $adDetail })
     Write-SelfTestLine 'approval-demo/done-gate' $adOk $adDetail
 
+    # 5) branchy 2-part protocol (route/payload split, inline) -----------------
+    Write-Host ''
+    Write-Host '── branchy 2-part protocol (route/payload split) ──'
+    $branchyDir  = Join-Path $examples 'branchy'
+    $branchyRuns = Join-Path $branchyDir '.runs'
+    $bpOk = $false; $bpDetail = ''
+    try {
+        if (Test-Path -LiteralPath $branchyRuns) { Remove-Item -LiteralPath $branchyRuns -Recurse -Force }
+        # Mock router trả multi-line: "PAYLOAD_DATA\ngt1000"
+        # Engine J.3 tách payload="PAYLOAD_DATA", route label="gt1000" → path tier→d5→output.
+        # output node dùng {{tier_payload}} → result.txt chứa "PAYLOAD_DATA".
+        $savedMock = $env:ENGINE_MOCK_ROUTER
+        $env:ENGINE_MOCK_ROUTER = "tier:PAYLOAD_DATA`ngt1000"
+        try {
+            $bpRun    = Invoke-Workflow $branchyDir 'selftest' -Mock 6> $null
+            $bpStatus = [string](Get-RunState $bpRun).status
+            $resPath  = Join-Path $bpRun 'result.txt'
+            $bpResult = if (Test-Path -LiteralPath $resPath) {
+                Get-Content -LiteralPath $resPath -Raw -Encoding utf8
+            } else { '' }
+            $hasPayload = $bpResult -like '*PAYLOAD_DATA*'
+            $bpOk     = ($bpStatus -eq 'done' -and $hasPayload)
+            $bpDetail = "status=$bpStatus payload-in-result=$hasPayload"
+        }
+        finally {
+            if ($null -ne $savedMock) { $env:ENGINE_MOCK_ROUTER = $savedMock }
+            else { Remove-Item Env:ENGINE_MOCK_ROUTER -ErrorAction SilentlyContinue }
+        }
+    }
+    catch {
+        $bpOk = $false; $bpDetail = $_.Exception.Message
+    }
+    finally {
+        if (Test-Path -LiteralPath $branchyRuns) { Remove-Item -LiteralPath $branchyRuns -Recurse -Force }
+    }
+    $items.Add([pscustomobject]@{ Name = 'branchy/2-part-protocol'; Pass = $bpOk; Detail = $bpDetail })
+    Write-SelfTestLine 'branchy/2-part-protocol' $bpOk $bpDetail
+
     # Bảng tổng -----------------------------------------------------------------
     $fails = @($items | Where-Object { -not $_.Pass }).Count
     $total = $items.Count
@@ -198,7 +238,7 @@ function Invoke-SelfTest {
     else {
         Write-Host "✗ selftest: $fails/$total FAIL" -ForegroundColor Red
     }
-    Write-Host '  (C.6: stamp assert nội dung node id; C.7: mem-demo assert "run2 ≠ run1"; D.6: approval-demo pause→resume→done)' -ForegroundColor DarkGray
+    Write-Host '  (C.6: stamp assert nội dung node id; C.7: mem-demo assert "run2 ≠ run1"; D.6: approval-demo pause→resume→done; J.4: branchy 2-part route/payload)' -ForegroundColor DarkGray
     return $fails
 }
 

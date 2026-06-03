@@ -51,6 +51,11 @@ function Initialize-Context {
     foreach ($n in $Graph.nodes) {
         $k = $n.output_key
         if (-not [string]::IsNullOrWhiteSpace($k) -and -not $ctx.ContainsKey($k)) { $ctx[$k] = '' }
+        # J.3: Pre-seed <output_key>_payload = "" cho router nodes (loop-feedback an toàn như output_key).
+        if ($n.type -eq 'router' -and -not [string]::IsNullOrWhiteSpace($k)) {
+            $pk = "${k}_payload"
+            if (-not $ctx.ContainsKey($pk)) { $ctx[$pk] = '' }
+        }
     }
     if (-not [string]::IsNullOrWhiteSpace($ProjectDir)) {
         $mem = Get-Memory $ProjectDir
@@ -126,6 +131,91 @@ function Select-NextNode {
     }
 
     return $outs[0].to
+}
+
+function Get-RouterChoices {
+    <#
+    .SYNOPSIS
+        Trả tập nhãn 'when' hợp lệ của cạnh ra từ node $NodeId trong $Graph.
+    .DESCRIPTION
+        Phase J.1 (CD-2): Nguồn sự thật nhãn router = edges/when từ graph — agent .md KHÔNG
+        cần hardcode nhãn. Lọc bỏ blank, lowercase, sort-unique → chuỗi bơm vào suffix real-mode.
+        Dot-source-safe: hàm thuần, không tự exec khi dot-source.
+    .OUTPUTS [string[]] tập nhãn đã chuẩn hoá (có thể rỗng nếu không có cạnh ra hoặc mọi when blank).
+    #>
+    param(
+        [Parameter(Mandatory)]$Graph,
+        [Parameter(Mandatory)][string]$NodeId
+    )
+    $outs = @($Graph.adj[$NodeId])
+    $labels = @(
+        $outs |
+        ForEach-Object { $_.when } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { $_.Trim().ToLowerInvariant() } |
+        Sort-Object -Unique
+    )
+    return $labels
+}
+
+function Write-RouteIssue {
+    <#
+    .SYNOPSIS
+        Ghi 1 entry NDJSON vào issue-queue tập trung khi router real-mode trả nhãn sai.
+    .DESCRIPTION
+        Phase J.2 (CD-2): Deterministic, KHÔNG gọi model. Append 1 dòng JSON vào
+        company/issues/route-issues.ndjson (gitignored qua issues/*.ndjson).
+        Tạo thư mục nếu chưa có. Fields: ts, run_id, node, raw_output, valid_choices[], label_extracted.
+        Dot-source-safe: hàm thuần, không tự exec khi dot-source.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$RunDir,
+        [Parameter(Mandatory)][string]$NodeId,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$RawOutput,
+        [Parameter(Mandatory)][AllowNull()][string[]]$ValidChoices
+    )
+    $issueFile = Join-Path $PSScriptRoot '../issues/route-issues.ndjson'
+    $issueDir  = Split-Path -Parent $issueFile
+    if (-not (Test-Path -LiteralPath $issueDir)) {
+        New-Item -ItemType Directory -Path $issueDir -Force | Out-Null
+    }
+    $runId = Split-Path -Leaf $RunDir
+    $choicesArr = @(if ($null -ne $ValidChoices) { $ValidChoices } else { @() })
+    $entry = [ordered]@{
+        ts             = (Get-Date).ToString('o')
+        run_id         = [string]$runId
+        node           = [string]$NodeId
+        raw_output     = [string]$RawOutput
+        valid_choices  = $choicesArr
+        label_extracted = (ConvertTo-RouterLabel $RawOutput)
+    }
+    $line = $entry | ConvertTo-Json -Compress -Depth 5
+    Add-Content -LiteralPath $issueFile -Value $line -Encoding utf8NoBOM
+}
+
+function Get-RouterPayload {
+    <#
+    .SYNOPSIS
+        Tách phần payload từ router output (giao thức 2-phần J.3).
+    .DESCRIPTION
+        Phase J.3 (CD-2): Router output = payload tự do + dòng cuối = nhãn route.
+        Trả phần payload = toàn bộ output TRỪ dòng không-trắng cuối cùng (nhãn route).
+        Tương thích ngược: router chỉ in nhãn đơn → payload = "" (pre-seed bình thường).
+        Mock router chỉ in nhãn → payload = "" → bất biến.
+        Dot-source-safe: hàm thuần, không tự exec khi dot-source.
+    .OUTPUTS [string] payload (có thể "" nếu chỉ có 1 dòng không-trắng).
+    #>
+    param([AllowEmptyString()][string]$Output)
+    $lines = @($Output -split "`r?`n")
+    # Tìm index của dòng không-trắng cuối cùng (chính là nhãn route)
+    $lastIdx = -1
+    for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+        if (-not [string]::IsNullOrWhiteSpace($lines[$i])) { $lastIdx = $i; break }
+    }
+    # Không có dòng nào, hoặc nhãn nằm ở dòng đầu tiên → không có payload
+    if ($lastIdx -le 0) { return '' }
+    # Payload = các dòng trước nhãn, bỏ blank cuối
+    return ($lines[0..($lastIdx - 1)] -join "`n").TrimEnd()
 }
 
 function Get-AgentFrontmatter {
@@ -297,7 +387,12 @@ function Invoke-Workflow {
             if ([string]::IsNullOrWhiteSpace($k)) { continue }
             $outPath = Join-Path $runDir "$k.txt"
             if (Test-Path -LiteralPath $outPath) {
-                $context[$k] = (Get-Content -LiteralPath $outPath -Raw -Encoding utf8)
+                $restored = (Get-Content -LiteralPath $outPath -Raw -Encoding utf8)
+                $context[$k] = $restored
+                # J.3: Restore _payload cho router nodes khi resume (tính lại từ output đã lưu).
+                if ($n.type -eq 'router') {
+                    $context["${k}_payload"] = Get-RouterPayload $restored
+                }
             }
         }
 
@@ -504,7 +599,19 @@ function Invoke-Workflow {
 
         $agentPath = Join-Path $ProjectDir $node.agent
         $prompt    = Resolve-Prompt $node.input $context
-        $base      = "$seq-$cursor"
+
+        # J.1 (CD-2): Bơm suffix "chọn MỘT nhãn" vào prompt router real-mode.
+        # Mock-path bất biến: ENGINE_MOCK_ROUTER trả nhãn trực tiếp, không cần suffix.
+        # Guard if (-not $Mock) để đảm bảo mock-path không bị ảnh hưởng.
+        if ($node.type -eq 'router' -and -not $Mock) {
+            $routerChoices = Get-RouterChoices $graph $cursor
+            if ($routerChoices.Count -gt 0) {
+                $choiceStr = $routerChoices -join ' | '
+                $prompt += "`n`n---`nChọn đúng MỘT nhãn sau (in nhãn ở dòng cuối):`n{ $choiceStr }"
+            }
+        }
+
+        $base = "$seq-$cursor"
         Set-Content -LiteralPath (Join-Path $runDir "$base.prompt.txt") -Value $prompt -Encoding utf8
 
         # Wiring 5.1: đọc frontmatter agent → truyền cờ headless cho claude CLI.
@@ -545,6 +652,19 @@ function Invoke-Workflow {
             throw "Workflow '$($graph.name)' dừng tại node '$cursor' (seq $seq): $errMsg (resume: run.ps1 resume $($graph.name))"
         }
 
+        # J.2: Validate nhãn router real-mode → Write-RouteIssue + throw fail-fast (KHÔNG retry).
+        # Guard if (-not $Mock): mock-path bất biến (ENGINE_MOCK_ROUTER trả nhãn hợp lệ, skip validate).
+        if ($node.type -eq 'router' -and -not $Mock) {
+            $routerLabel  = ConvertTo-RouterLabel $output
+            $validChoices = Get-RouterChoices $graph $cursor
+            if ($validChoices.Count -gt 0 -and $routerLabel -notin $validChoices) {
+                Write-RouteIssue -RunDir $runDir -NodeId $cursor -RawOutput $output -ValidChoices $validChoices
+                # GIỮ NGUYÊN text throw (tương thích ngược app/tester parse)
+                $valid = @($graph.adj[$cursor] | ForEach-Object { $_.when } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join ', '
+                throw "Router '$cursor' trả nhãn '$routerLabel' không khớp 'when' nào trong { $valid }"
+            }
+        }
+
         # Lịch sử từng lượt + output mới nhất (latest-wins, nguồn bridge) + nạp vào context.
         Set-Content -LiteralPath (Join-Path $runDir "$base.out.txt") -Value $output -Encoding utf8
         # D.1: node_output mang NỘI DUNG output ĐẦY ĐỦ (đóng #3 "(N chars)" → full content).
@@ -552,6 +672,12 @@ function Invoke-Workflow {
         if (-not [string]::IsNullOrWhiteSpace($node.output_key)) {
             Set-Content -LiteralPath (Join-Path $runDir "$($node.output_key).txt") -Value $output -Encoding utf8
             $context[$node.output_key] = $output
+            # J.3: Auto-store <output_key>_payload cho router nodes. Node successor dùng {{<key>_payload}}.
+            # Tương thích ngược: router chỉ in nhãn → Get-RouterPayload = "" → pre-seed bình thường.
+            # Áp dụng cả Mock (payload = "" cho mock router 1-dòng) và real-mode.
+            if ($node.type -eq 'router') {
+                $context["$($node.output_key)_payload"] = Get-RouterPayload $output
+            }
         }
 
         # Write-path (Phase M-B): node `record` có 'memory_write' → append output vào đúng tầng store.

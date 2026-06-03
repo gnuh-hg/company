@@ -65,7 +65,7 @@ Sau bước 3, run `hello` (2 node `a → b`) phải báo cả 2 lượt `done`,
 | | `trial` | `trial <proj> [-Model m]` | **Tester tầng trial**: tầng cấu trúc (mock) → copy vào sandbox cô lập → chạy **THẬT** → assert `trial[]` trên artifact |
 | **AUTHOR** | `edit` | `edit <proj>` | TUI thêm/xoá/đổi thứ tự node, chọn agent, set input deps (pipeline-v1) |
 | | `save-graph` | `save-graph <proj> <candidate-file>` | Ghi + validate atomic (graph-format); PASS → commit; FAIL → restore + `{"ok":false,"errors":[]}` |
-| **Advanced** | `selftest` | `selftest [all]` | Chạy bộ test engine (7 stamp + mem-demo + approval-demo); **exit = số mục fail** |
+| **Advanced** | `selftest` | `selftest [all]` | Chạy bộ test engine (7 stamp + mem-demo + approval-demo + branchy/2-part); **exit = số mục fail** |
 
 Không arg / `help` / `-h` / `--help` → in help đầy đủ.
 
@@ -165,6 +165,35 @@ $env:ENGINE_MOCK_ROUTER = "tier:gt5000"
 ./run.ps1 run branchy "đơn 8000" -Mock           # router trả nhãn "gt5000" → đi cạnh d10
 ./run.ps1 status branchy                          # path đi qua: tier → d10 → output
 ```
+
+#### Router choices auto-inject (Phase J / CD-2)
+
+Engine **tự bơm tập nhãn hợp lệ** vào prompt router lúc chạy real-mode — agent `.md` **không cần hardcode nhãn**. Nguồn sự thật duy nhất là `edges`/`when` từ graph:
+
+```
+---
+Chọn đúng MỘT nhãn sau (in nhãn ở dòng cuối):
+{ gt10000 | gt5000 | gt1000 | else }
+```
+
+Suffix này ghép **engine-side** (hằng cố định, không cấu hình per-node), chỉ khi chạy real-mode. Khi `-Mock`: bỏ qua (mock trả nhãn qua `ENGINE_MOCK_ROUTER` — bất biến). Nhãn sai (không trong tập `when`): engine ghi 1 entry deterministic vào `company/issues/route-issues.ndjson` (gitignored) rồi `throw` ngay — không retry.
+
+#### Giao thức 2-phần: payload + nhãn route
+
+Router có thể in **2 phần**: payload tự do (phần trước) + nhãn route (dòng cuối). Engine tách tự động:
+
+- `{{<output_key>_payload}}` → phần payload (string; `""` nếu router chỉ in nhãn đơn)
+- Tương thích ngược: router chỉ in nhãn đơn → `_payload = ""` → không break workflow hiện có
+
+Ví dụ output router 2-phần:
+```
+Order value: 8500 → tier gt5000
+gt5000
+```
+
+Node successor dùng `{{tier_payload}}` trong `input` để nhận dòng lý do. `validate` cảnh báo (WARN, không error) nếu dùng `{{x_payload}}` mà không có router với `output_key=x`.
+
+---
 
 ### Loop — cycle có chặn
 
@@ -436,7 +465,7 @@ company/
 │   ├── validate.ps1     # graph validation; approval: không cần agent, ≥1 cạnh ra
 │   ├── check.ps1        # Tester tầng cấu trúc
 │   ├── sandbox.ps1      # Tester tầng trial + harness cô lập
-│   ├── test-runner.ps1  # Invoke-SelfTest (lệnh: selftest) — 7 stamp + mem-demo + approval-demo (9 mục)
+│   ├── test-runner.ps1  # Invoke-SelfTest (lệnh: selftest) — 7 stamp + mem-demo + approval-demo + branchy/2-part (10 mục)
 │   ├── pattern.ps1      # Expand-Pattern (stamp fragment)
 │   ├── memory.ps1       # Get-Memory / Write-MemoryEntry
 │   ├── status.ps1       # status + logs viewer; hiện awaiting gate + prompt + choices
@@ -458,4 +487,4 @@ company/
 
 **Trạng thái build**: Phase hq-build (R/0/1/2/M/3/4/5) + hq-improve (A→G) ✅ DONE. hq-v2 Phase 0 + H.0–H.3 ✅ DONE; Phase H.4+ đang làm. App web React+Vite+Tailwind+React Flow: xem graph tương tác + bấm Run → log live + node highlight + duyệt HITL + **sửa cấu trúc graph validate-gated**. Xem §App bên trên.
 
-Bộ test offline (mock, không đốt token): **`./run.ps1 selftest`** (7 `p-*/stamp.ps1` + mem-demo + approval-demo done-gate; **9 mục tổng**; exit = số mục fail).
+Bộ test offline (mock, không đốt token): **`./run.ps1 selftest`** (7 `p-*/stamp.ps1` + mem-demo + approval-demo done-gate + branchy/2-part-protocol; **10 mục tổng**; exit = số mục fail).

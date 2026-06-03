@@ -313,6 +313,22 @@ function Test-Workflow {
         foreach ($k in (Get-PromptKeys $node.input)) {
             if ($k -in $script:ReservedKeys) { continue }
             if (-not $producers.ContainsKey($k)) {
+                # J.3 (Phase J): <base>_payload = auto-inject bởi engine cho router nodes (dynamic key).
+                # Nếu có router với output_key=<baseKey> → valid (KHÔNG error, KHÔNG warn).
+                # Nếu KHÔNG có → WARN (không phá workflow hợp lệ hiện có; exit = 0 như cũ).
+                if ($k -match '^(.+)_payload$') {
+                    $baseKey = $Matches[1]
+                    $hasRouterForBase = $false
+                    foreach ($n2 in $nodes) {
+                        if ($n2.type -eq 'router' -and $n2.output_key -eq $baseKey) {
+                            $hasRouterForBase = $true; break
+                        }
+                    }
+                    if (-not $hasRouterForBase) {
+                        $warnings.Add("node '$id': key '{{$k}}' dùng _payload nhưng không có router nào với output_key='$baseKey' — engine sẽ resolve '' (pre-seed); kiểm tra tên router.")
+                    }
+                    continue   # _payload dynamic — không error, bỏ qua data-cycle check
+                }
                 $errors.Add("node '$id': key '{{$k}}' không resolve được (không phải 'user_request' và không khớp output_key nào)")
                 continue
             }

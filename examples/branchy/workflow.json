@@ -8,7 +8,7 @@
     { "id": "d10",    "agent": "agents/disc.md",   "input": "{{user_request}}\n10%", "output_key": "discount" },
     { "id": "d5",     "agent": "agents/disc.md",   "input": "{{user_request}}\n5%",  "output_key": "discount" },
     { "id": "d0",     "agent": "agents/disc.md",   "input": "{{user_request}}\n0%",  "output_key": "discount" },
-    { "id": "output", "agent": "agents/output.md", "input": "{{user_request}}\n{{discount}}", "output_key": "result" }
+    { "id": "output", "agent": "agents/output.md", "input": "{{user_request}}\n{{discount}}\n{{tier_payload}}", "output_key": "result" }
   ],
   "edges": [
     { "from": "tier", "to": "d20", "when": "gt10000" },
