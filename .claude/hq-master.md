@@ -20,7 +20,8 @@
 chính là một chi nhánh** (`workflow.json` + agents), engine vừa là **định dạng output** HQ ghi ra,
 vừa là **công cụ verify**. Builder Write/Edit `workflow.json` + `agents/*.md` thẳng vào
 `projects/<branch>/` (KHÔNG `autobuild` — đã xóa); tester gọi `run.ps1 validate/run -Mock` để gate.
-**Engine là code cố định — KHÔNG sửa `engine/*.ps1`; chỉ GỌI `run.ps1`.**
+**Engine là code cố định — KHÔNG sửa `engine/*.ps1`; chỉ GỌI `run.ps1`.** _(Ngoại lệ kiểm soát:
+`hq-self-builder` ĐƯỢC sửa `engine/*.ps1` CHỈ sau regression gate đầy đủ — xem §Ranh giới nới bất biến bên dưới.)_
 
 | Khái niệm | Thuộc về | HQ-team dùng thế nào? |
 |---|---|---|
@@ -30,6 +31,7 @@ vừa là **công cụ verify**. Builder Write/Edit `workflow.json` + `agents/*.
 | `projects/<branch>/workflow.json` + `agents/*.md` | **Deliverable HQ** | ✅ Builder Write/Edit TRỰC TIẾP |
 | `catalog/*.md` | Menu vai chi nhánh | ✅ CTO chọn, builder phỏng theo dựng roster |
 | `run.ps1 validate/run/check/graph` | Engine | ✅ Builder smoke-check + tester gate (`-Mock`) |
+| `engine/*.ps1`, `.claude/agents/hq-*.md`, `CLAUDE.md`... | **Self-mod scope** | ✅ `hq-self-builder` ĐƯỢC sửa (CHỈ sau regression gate + user-approval) |
 | `run.ps1 autobuild/autofix` | Workflow cũ (đã xóa) | ❌ Không tồn tại — builder tự viết workflow.json |
 | `build-spec` / `plan-as-data` JSON giữa teammate | Workflow cũ | ❌ Teammate giao tiếp prose; workflow.json là artifact, KHÁC |
 | `company/memory/` + `<branch>/memory/` | Engine branch store (`memory.ps1` quản) | ❌ HQ KHÔNG đụng tay |
@@ -49,6 +51,8 @@ giữa các vai → tàn dư cũ → chỉnh (`FORM`).
 | `hq-cto` | HOW — thiết kế chi nhánh (pipeline node/edge/when + roster từ catalog/) | Read, Task*, SendMessage | prose 5 mục A–E |
 | `hq-builder` | Write/Edit `workflow.json` + `agents/*.md` chi nhánh vào `projects/<branch>/` | Read, Write, Edit, Bash, Task*, SendMessage | file + lệnh verify |
 | `hq-tester` | verify chi nhánh bằng `run.ps1 validate/run -Mock` + ghi memory | Read, Bash, Task*, SendMessage | `CHECK_RESULT: pass\|fail` |
+| `hq-self-builder` | **self-mod** — Write/Edit trực tiếp file HQ (`.claude/`, `engine/`, `catalog/`, `CLAUDE.md`...) + regression gate | Read, Write, Edit, Bash, Task*, SendMessage | files đổi + gate evidence |
+| `hq-self-tester` | **verify self-mod** — regression gate khách quan (`selftest`+`validate hello`+`run -Mock`) + re-spawn smoke + `SELF_CHECK_RESULT` | Read, Bash, Task*, SendMessage | `SELF_CHECK_RESULT: pass\|fail` + changelog draft |
 
 > **Lưu ý tool (bài học H.10):** mỗi agent body PHẢI có `TaskGet/TaskUpdate/TaskList/SendMessage` trong
 > `tools:` — nếu chỉ liệt tool domain (Read/Bash...) thì teammate KHÔNG report/TaskUpdate được → câm.
@@ -73,6 +77,8 @@ LEAD nhận user_request
   │     ├── XÂY chi nhánh MỚI → lập team full chain ↓
   │     ├── SỬA chi nhánh ĐÃ CÓ theo yêu cầu user mới → lập team chain rút gọn ↓
   │     │     (loại request hạng nhất — KHÁC re-fix từ verdict tester ở nhánh FAIL bên dưới)
+  │     ├── TỰ SỬA HQ (self-mod) — sửa `.claude/`/`engine/`/`CLAUDE.md`... → lập team self-mod ↓
+  │     │     (user-approval gate BẮT BUỘC trước khi "done" — D-S2)
   │     └── phức tạp / multi-file / domain mới → lập team ↓
   │
   ├─ TeamCreate([researcher, planner, cto, builder, tester])  ← chọn tối thiểu cần
@@ -107,7 +113,7 @@ LEAD nhận user_request
     → TeamDelete → báo user (tổng kết: task nào pass, file ở đâu, cách chạy)
 ```
 
-**Rút gọn chain theo loại task** (không phải task nào cũng cần đủ 5 vai):
+**Rút gọn chain theo loại task** (không phải task nào cũng cần đủ 7 vai):
 
 | Loại request | Vai cần | Bỏ qua |
 |---|---|---|
@@ -115,6 +121,7 @@ LEAD nhận user_request
 | **Sửa chi nhánh đã có theo yêu cầu user mới** (hạng nhất) | planner (light) → builder → tester | researcher/cto |
 | Chỉ thiết kế (chưa build) | researcher → planner → cto | builder/tester |
 | Yêu cầu rõ ràng, nhỏ, 1 stack | planner → builder → tester | researcher/cto |
+| **Tự sửa HQ (self-mod)** | planner (light) → [cto nếu phức tạp] → **self-builder → self-tester** → ⛔ user-approval | researcher; cto optional |
 
 > **⚠️ "Sửa chi nhánh đã có theo yêu cầu user mới" ≠ re-fix từ verdict.** Đây là **loại request
 > hạng nhất** (user yêu cầu thay đổi một chi nhánh đang tồn tại — vd "thêm node X", "đổi roster") →
@@ -142,7 +149,7 @@ LEAD nhận user_request
 2. Với mỗi teammate cần:
      Agent(team_name="hq-<slug>", name="<role>", subagent_type="hq-<role>",
            run_in_background=true)
-   - name = tên gọi ngắn ("researcher", "builder"…); subagent_type = file agent ("hq-researcher"…)
+   - name = tên gọi ngắn ("researcher", "builder", "self-builder"…); subagent_type = file agent ("hq-researcher", "hq-self-builder"…)
    - spawn song song (cùng 1 response block) các teammate độc lập
 3. ĐỢI ≥30–45s — teammate đọc memory + agent body trước khi ack.
      Gửi SendMessage sớm → bị queue đè → SLOW-PICKUP.
@@ -156,6 +163,21 @@ Brief template + per-role brief + layout terminal + xử lý teammate im → **`
 
 ---
 
+## Ranh giới nới bất biến (self-mod — CHỈ cho `hq-self-builder`)
+
+> Bất biến gốc: "engine là code cố định — KHÔNG sửa `engine/*.ps1`; `hq-builder` chỉ ghi `projects/<branch>/`".
+> Sau Phase S, bất biến này được **nới có kiểm soát** theo nguyên tắc sau:
+
+| Vai | Được sửa `engine/*.ps1`? | Được sửa `.claude/` files? | Điều kiện |
+|---|---|---|---|
+| `hq-builder` (branch-builder) | ❌ TUYỆT ĐỐI CẤM | ❌ TUYỆT ĐỐI CẤM | Bất biến cứng — không ngoại lệ |
+| `hq-self-builder` (self-mod) | ✅ **SAU regression gate** | ✅ **SAU regression gate** | Regression PASS + user-approval diff bắt buộc (D-S2) |
+
+**Mode separation (D-S4):** `hq-self-builder` KHÔNG chạy chung session với branch-build.
+Nới bất biến **không lan sang** `hq-builder` hay bất kỳ agent nào khác.
+
+---
+
 ## Trỏ tài liệu
 
 | Tài liệu | Đường dẫn |
@@ -163,7 +185,9 @@ Brief template + per-role brief + layout terminal + xử lý teammate im → **`
 | Playbook thao tác (spawn template, layout, failure-mode) | `.claude/teams/playbook.md` |
 | Roster agent body | `.claude/agents/hq-*.md` |
 | Issue queue (hành vi teammate) | `company/issues/team-issues-queue.md` |
-| Skill build + verify | `.claude/skills/build-verify/SKILL.md` |
+| Skill build + verify (branch) | `.claude/skills/build-verify/SKILL.md` |
+| Skill self-modify (HQ self-mod) | `.claude/skills/self-modify/SKILL.md` |
 | Skill memory | `.claude/skills/hq-memory/SKILL.md` |
 | Memory store HQ-team | `.claude/memory/` |
 | Spec kiến trúc đầy đủ (lịch sử thiết kế) | `plan/hq-v2/phase-h/design.md` |
+| Design self-mod (ranh giới + procedure + gate) | `plan/hq-v2/phase-s/design.md` |

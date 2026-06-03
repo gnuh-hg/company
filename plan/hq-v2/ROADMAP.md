@@ -181,7 +181,7 @@ CD-1 / CD-2 / CD-3 (đã chốt 2026-06-02)
 | J — Rẽ nhánh chủ động (CD-2) | `plan/hq-v2/phase-j/` | 🟡 soạn xong, chưa thực thi (2026-06-03). 3 phase / 5 session. J.1 bơm choices · J.2 validate+issue-queue · J.3 tách route/payload · J.4 fixture+selftest · J.5 docs. Quyết định đảo: bỏ re-ask, fail+queue ngay. Xem `plan/hq-v2/phase-j/`. |
 | K — HITL pause-policy + hỏi-user (#3, CD-3) | `plan/hq-v2/phase-k/` | 📋 Chưa làm |
 | L — App UX layout + I/O + form (#4+#5) | `plan/hq-v2/phase-l/` | 📋 Chưa làm |
-| S — HQ self-modification + branch-edit hạng nhất (vai #2+#3) | `plan/hq-v2/phase-s/` | 🟡 soạn xong, chưa thực thi (2026-06-03). 3 sub-phase / 7 session (S.0 design → S.1 branch-edit → S.2 skill → S.3/S.4 agent → S.5 wiring → S.6 real-run gate). Scope full incl engine; cổng regression+approval. Xem `phase-s/`. |
+| S — HQ self-modification + branch-edit hạng nhất (vai #2+#3) | `plan/hq-v2/phase-s/` | ✅ DONE (2026-06-03, S.6 skip). Deliverable: design.md + branch-edit hạng nhất + skill self-modify + agent hq-self-builder + agent hq-self-tester + wiring hq-master/playbook/CLAUDE.md. |
 
 ---
 

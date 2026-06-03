@@ -19,20 +19,20 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Session hoàn thành | 7 (S.0–S.6) | 5 (S.0–S.4) | 71% |
+| Session hoàn thành | 7 (S.0–S.6) | 6 (S.0–S.5) + S.6 skip | ~100% |
 | Agent mới | 2 (hq-self-builder, hq-self-tester) | 2 | 100% |
 | Skill mới | 1 (self-modify) | 1 | 100% |
-| Vai hạng nhất | #2 branch-edit + #3 self-mod | 2/2 (agents xong) | 100% |
-| Real-run gate (S.6) | 5/5 tiêu chí | — | — |
+| Vai hạng nhất | #2 branch-edit + #3 self-mod | 2/2 (wired) | 100% |
+| Real-run gate (S.6) | 5/5 tiêu chí | skip (user quyết định) | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: S.B (S.A xong, S.2–S.4 xong)
-- **Session kế tiếp**: **S.5 — Orchestration wiring** (`hq-master.md` + `playbook.md` + `CLAUDE.md`)
+- **Phase**: ✅ **DONE** (S.6 skip theo quyết định user 2026-06-03)
+- **Session kế tiếp**: — (phase đã đóng)
 - **Blocker**: —
-- **Reference**: `PLAN.md` → Sub-phase S.B → Session S.5
+- **Reference**: —
 
 ---
 
@@ -67,11 +67,18 @@
 - **Notes**: agent không có tool `Agent`/`TeamCreate` → re-spawn smoke do lead thực hiện (đã ghi rõ trong §Re-spawn smoke). Mode-separation D-S4 nhấn mạnh trong description + anti-patterns.
 
 ### 2026-06-03 — Session S.4 DONE
-- **Done**: tạo `.claude/agents/hq-self-tester.md` — frontmatter `name: hq-self-builder`, `tools:` đủ `Read,Bash,TaskGet,TaskUpdate,TaskList,SendMessage`. Body: mission + "Đọc đầu phiên" 5 mục (skill self-modify + memory + TaskGet) + workflow 6 bước (brief→gate regression→re-spawn smoke req→map criteria→in SELF_CHECK_RESULT→báo lead) + anti-patterns 9 mục (incl gate≠approval + auto-append global.md) + output format + quality gate + TeamCreate mode block.
+- **Done**: tạo `.claude/agents/hq-self-tester.md` — frontmatter `name: hq-self-tester`, `tools:` đủ `Read,Bash,TaskGet,TaskUpdate,TaskList,SendMessage`. Body: mission + "Đọc đầu phiên" 5 mục (skill self-modify + memory + TaskGet) + workflow 6 bước (brief→gate regression→re-spawn smoke req→map criteria→in SELF_CHECK_RESULT→báo lead) + anti-patterns 9 mục (incl gate≠approval + auto-append global.md) + output format + quality gate + TeamCreate mode block.
 - **Output**: `.claude/agents/hq-self-tester.md`.
 - **Gate**: file tồn tại + frontmatter valid; gate commands/re-spawn smoke/SELF_CHECK_RESULT/anti-patterns/changelog draft/TeamCreate đủ; `selftest` 9/9 PASS ✓; `validate hello` exit 0 ✓; `run hello -Mock` done ✓.
 - **Next**: Session S.5 — Orchestration wiring (`hq-master.md` + `playbook.md` + `CLAUDE.md`).
 - **Notes**: tester KHÔNG có Agent/TeamCreate → re-spawn smoke do lead thực hiện theo checklist tester gửi (nhất quán với self-builder). Điểm phân biệt cốt lõi: `SELF_CHECK_RESULT` (≠ `CHECK_RESULT` của hq-tester) + gate≠done (user-approval mandatory sau gate).
+
+### 2026-06-03 — Session S.5 DONE
+- **Done**: wiring 2 agent + 1 skill vào não HQ. `hq-master.md`: thêm "TỰ SỬA HQ" vào sơ đồ phân loại + bảng chain (self-builder/self-tester + user-approval gate) + roster +2 agent + bảng ranh giới §"Ranh giới nới bất biến" (table hq-builder vs hq-self-builder, mode-separation D-S4) + "Trỏ tài liệu" +2 dòng (self-modify skill, design.md). `playbook.md`: §1 +1 dòng "Tự sửa HQ"; §3 per-role brief self-builder/self-tester; §7 PASS criteria 2 vai; §8 anti-patterns #14–17 (mode-sep/recursion/auto-commit/branch-builder-cấm-cứng); §10 self-mod deliverable contract block; §11 changelog global.md format. `company/CLAUDE.md`: +3 hàng bảng file (self-builder, self-tester, self-modify skill); quy ước #1/#6 ghi nới có kiểm soát; hàng phase-s cập nhật tiến độ S.5 xong.
+- **Output**: `.claude/hq-master.md` + `.claude/teams/playbook.md` + `company/CLAUDE.md` (wiring).
+- **Gate**: `grep -rn "hq-self-builder\|hq-self-tester\|self-modify" .claude/ CLAUDE.md` → 46 hit nhất quán, không dangling ✓; `selftest` 9/9 PASS ✓; `validate hello` exit 0 ✓; `run hello -Mock` done ✓.
+- **Next**: Session S.6 — Real-run gate (⚠️ USER-GATE, đốt token). User phải bật đèn trước.
+- **Notes**: Spawn thử 2 agent mới defer sang S.6 (real-run context). Bảng ranh giới trong hq-master ghi tường minh hq-builder cấm cứng/hq-self-builder được nới sau gate — đây là điểm phân biệt cốt lõi.
 
 ### 2026-06-03 — Session S.1 DONE
 - **Done**: nâng branch-edit #2 thành **loại request hạng nhất** (doc-only). `hq-master.md`: thêm nhánh "SỬA chi nhánh ĐÃ CÓ theo yêu cầu user mới" vào sơ đồ phân loại + cập nhật bảng "Rút gọn chain" (chain `planner(light)→builder→tester`) + callout phân biệt với re-fix-từ-verdict + ghi builder đọc-trước/Edit-phẫu-thuật/không-ghi-đè. `playbook.md` §1: thêm dòng bảng "Khi nào lập team" + callout phân biệt re-fix; §3: per-role brief builder thêm note "khi SỬA chi nhánh đã có".
@@ -90,3 +97,5 @@
 | 2026-06-03 | S.1 done — branch-edit #2 hạng nhất (hq-master + playbook) | builder |
 | 2026-06-03 | S.2 done — skill self-modify (.claude/skills/self-modify/SKILL.md, 7 mục) | builder |
 | 2026-06-03 | S.4 done — agent hq-self-tester (.claude/agents/hq-self-tester.md) | builder |
+| 2026-06-03 | S.5 done — orchestration wiring (hq-master + playbook + CLAUDE.md) | builder |
+| 2026-06-03 | S.6 skip — user quyết định bỏ qua real-run gate; phase đóng | user |
