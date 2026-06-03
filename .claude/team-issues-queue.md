@@ -9,6 +9,23 @@
 
 <!-- Thêm issue mới bên dưới, mới nhất ở trên cùng -->
 
+## 2026-06-03 — SILENT-COMPLETE — tất cả agent body dùng "trong task" thay vì paste output
+
+- **Code**: SILENT-COMPLETE (systemic, tất cả 5 agent)
+- **Session**: H.10 done-gate
+- **Mô tả**: planner/cto/builder/tester dùng shorthand "Plan/Thiết kế/Chi tiết trong task" trong SendMessage template. Lead không đọc được output vì không có cơ chế TaskGet automatic sau mỗi message. Kết quả: lead nhận được signal "done" nhưng không có nội dung.
+- **Fix**: Sửa tất cả 4 agent body — SendMessage phải PASTE đầy đủ output inline. Done.
+- **Status**: resolved 2026-06-03 (edit: hq-planner/cto/builder/tester.md)
+
+## 2026-06-03 — WRONG-RECIPIENT — tất cả agent dùng `to="hq-lead"` (team name = "team-lead")
+
+- **Code**: OTHER (wrong SendMessage recipient)
+- **Session**: H.10 done-gate
+- **Mô tả**: Tất cả 5 agent body hardcode `SendMessage(to="hq-lead")`. TeamCreate đặt lead name = "team-lead". System treat message đến "hq-lead" như peer DM → chỉ hiện summary trong idle_notification, không deliver đầy đủ đến lead.
+- **Root cause**: Agent body viết "hq-lead" theo tên team HQ, nhưng TeamCreate tự đặt name="team-lead" cho lead session.
+- **Fix**: sed replace tất cả `to="hq-lead"` → `to="team-lead"` trong 5 agent body. Done.
+- **Status**: resolved 2026-06-03 (edit: tất cả hq-*.md)
+
 ## 2026-06-02 — SILENT-COMPLETE — researcher completed task #1 không SendMessage output
 
 - **Code**: SILENT-COMPLETE

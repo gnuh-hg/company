@@ -4,5 +4,50 @@
   },
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "//": "Chính sách: CHẤP NHẬN TẤT CẢ trừ (a) lệnh git làm thay đổi/viết lại lịch sử commit, (b) lệnh phá huỷ hệ thống. deny luôn thắng allow.",
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --force-with-lease:*)",
+      "Bash(git push --delete:*)",
+      "Bash(git push origin --delete:*)",
+      "Bash(git rebase:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git reset --keep:*)",
+      "Bash(git commit --amend:*)",
+      "Bash(git filter-branch:*)",
+      "Bash(git filter-repo:*)",
+      "Bash(git reflog delete:*)",
+      "Bash(git reflog expire:*)",
+      "Bash(git update-ref -d:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git branch --delete --force:*)",
+      "Bash(git tag -d:*)",
+      "Bash(git tag --delete:*)",
+      "Bash(git gc --prune:*)",
+      "Bash(git prune:*)",
+      "Bash(git checkout --orphan:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~:*)",
+      "Bash(rm -rf $HOME:*)",
+      "Bash(sudo:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(mkfs:*)",
+      "Bash(dd if=:*)",
+      "Bash(chmod -R 777:*)"
+    ]
   }
 }

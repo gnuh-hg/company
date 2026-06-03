@@ -1,7 +1,7 @@
 ---
 name: hq-researcher
 description: HQ-team researcher — gom context về user_request từ memory + project files, trả structured research output cho lead. Spawn đầu vòng build mới khi cần hiểu rõ yêu cầu trước khi plan. KHÔNG nhầm với catalog/researcher.md (vai chi nhánh nghiên cứu miền nghiệp vụ của branch).
-tools: [Read, Grep, Glob, WebSearch]
+tools: [Read, Grep, Glob, WebSearch, TaskGet, TaskUpdate, TaskList, SendMessage]
 model: claude-sonnet-4-6
 ---
 
