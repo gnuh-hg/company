@@ -134,6 +134,15 @@
 - **Phụ thuộc:** Phase J + K (UI phản ánh routing + pause mới) + H.0 (biết app là branch-only). Đi sau cùng.
 - **Done-gate:** mở app chi nhánh → graph trái / log phải; chạy 1 run có node `ask` → trả lời trong app → chạy tiếp; thêm node = chọn agent từ dropdown + wire data trực quan, Save validate-gated; workflow.json vẫn coordinate-free + luôn hợp lệ.
 
+### Phase S — HQ self-modification + branch-edit hạng nhất (vai #2 + #3, user nêu 2026-06-03)
+> **Năng lực MỚI ngoài 5-issue gốc.** User chốt HQ-team cần 3 vai: (1) build chi nhánh — đã có (Phase H); (2) **chỉnh sửa chi nhánh** đã có như loại request hạng nhất; (3) **tự sửa & build chính nó**.
+- **Mục tiêu:** HQ tự-sửa-mình (scope FULL kể cả `engine/*.ps1`) qua luồng có **regression gate + user-approval diff + git restore**; #2 thành loại request hạng nhất (≠ re-fix ẩn).
+- **Xây gì:** skill `self-modify` + 2 agent `hq-self-builder` (write `.claude/`+`company/` incl engine, backup+gate) / `hq-self-tester` (gate = `selftest`+`validate hello`+`run -Mock` + re-spawn smoke); wiring `hq-master`/`playbook`/`CLAUDE.md`; doc #2 hạng nhất. Reuse researcher/planner/cto (prose+Read). Kết = real-run gate đốt token.
+- **Quyết định đã chốt (user 2026-06-03):** scope full incl engine · cổng = regression gate + user duyệt diff · long-plan đầy đủ (không qua loa 1 agent). 4 default D-S1..D-S4 trong `phase-s/PLAN.md` (backup git-based · không auto-commit · reuse researcher/planner/cto · mode-separation branch vs self).
+- **Nới bất biến CÓ KIỂM SOÁT:** "engine là code cố định" (CLAUDE.md #1) nới CHỈ cho `hq-self-builder` sau gate; branch `hq-builder` vẫn TUYỆT ĐỐI cấm đụng engine/.claude.
+- **Phụ thuộc:** Phase H (HQ native team — đã DONE). Độc lập I/J/K/L.
+- **Done-gate:** real-run S.6 đạt 5/5 (1 self-mod commit qua luồng + selftest PASS + re-spawn pick-up + 1 ca restore + changelog `global.md`).
+
 ---
 
 ## Thứ tự phụ thuộc (tóm tắt)
@@ -172,6 +181,7 @@ CD-1 / CD-2 / CD-3 (đã chốt 2026-06-02)
 | J — Rẽ nhánh chủ động (CD-2) | `plan/hq-v2/phase-j/` | 🟡 soạn xong, chưa thực thi (2026-06-03). 3 phase / 5 session. J.1 bơm choices · J.2 validate+issue-queue · J.3 tách route/payload · J.4 fixture+selftest · J.5 docs. Quyết định đảo: bỏ re-ask, fail+queue ngay. Xem `plan/hq-v2/phase-j/`. |
 | K — HITL pause-policy + hỏi-user (#3, CD-3) | `plan/hq-v2/phase-k/` | 📋 Chưa làm |
 | L — App UX layout + I/O + form (#4+#5) | `plan/hq-v2/phase-l/` | 📋 Chưa làm |
+| S — HQ self-modification + branch-edit hạng nhất (vai #2+#3) | `plan/hq-v2/phase-s/` | 🟡 soạn xong, chưa thực thi (2026-06-03). 3 sub-phase / 7 session (S.0 design → S.1 branch-edit → S.2 skill → S.3/S.4 agent → S.5 wiring → S.6 real-run gate). Scope full incl engine; cổng regression+approval. Xem `phase-s/`. |
 
 ---
 

@@ -16,11 +16,17 @@ Lập team **không phải mặc định** — tốn token + tăng coordination 
 
 | Tình huống | Lead làm gì |
 |---|---|
-| Request mới cần xây thật, multi-file / domain mới | Spawn full chain: researcher → planner → cto → builder → tester |
-| Sửa deliverable đã có | Spawn builder + tester (bỏ researcher/planner/cto) |
+| Request mới cần xây chi nhánh thật, multi-file / domain mới | Spawn full chain: researcher → planner → cto → builder → tester |
+| **Sửa chi nhánh đã có theo yêu cầu user mới** (hạng nhất, ≠ re-fix) | Spawn planner (light) + builder + tester (bỏ researcher/cto) |
 | Chỉ cần thiết kế (chưa build) | Spawn researcher + planner + cto |
 | Yêu cầu rõ, nhỏ, 1 stack | Spawn planner + builder + tester |
 | Request đơn giản (hỏi, status, đọc file) | Lead tự xử — KHÔNG spawn |
+
+> **Sửa chi nhánh đã có** là loại request hạng nhất — user yêu cầu thay đổi một chi nhánh đang tồn
+> tại trong `projects/<branch>/` (thêm/bớt node, đổi roster, sửa agent). KHÁC **re-fix từ verdict**
+> (tester báo fail trong vòng build → builder vá bug, không có user-request mới). Loại này cần
+> **planner light** chốt WHAT thay đổi (delta, không re-plan toàn bộ); builder **đọc file hiện có
+> TRƯỚC**, Edit phẫu thuật, KHÔNG ghi đè toàn bộ.
 
 **Dấu hiệu cần spawn** (bất kỳ 1):
 - Deliverable > 3 file hoặc > 1 stack/domain.
@@ -104,6 +110,10 @@ Goal 1 câu đo được + mỗi Done-criteria có cách kiểm khách quan + St
 **builder** — plan + thiết kế CTO (paste) + tên chi nhánh `<branch>`. STOP: `workflow.json` +
 `agents/*.md` ghi vào `projects/<branch>/`, smoke-check `run.ps1 validate <branch>` exit 0 +
 `run -Mock` done, báo tester kèm lệnh engine + done-criteria.
+> **Khi SỬA chi nhánh đã có** (loại hạng nhất, không phải xây mới): builder **đọc
+> `projects/<branch>/` hiện có TRƯỚC** (workflow.json + agents/), Edit **phẫu thuật** đúng phần
+> delta theo plan light, **KHÔNG ghi đè toàn bộ** file. Brief phải kèm `<branch>` đang tồn tại +
+> mô tả thay đổi cụ thể.
 
 **tester** — done-criteria (từ plan) + tên chi nhánh + lệnh engine (từ builder). STOP: chạy
 `run.ps1 validate <branch>` + `run <branch> "x" -Mock` thật, in `CHECK_RESULT: pass|fail` kèm

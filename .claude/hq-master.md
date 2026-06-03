@@ -70,6 +70,9 @@ LEAD nhận user_request
   │
   ├─ Phân loại
   │     ├── đơn giản / 1–2 tool call → LEAD tự xử (không spawn)
+  │     ├── XÂY chi nhánh MỚI → lập team full chain ↓
+  │     ├── SỬA chi nhánh ĐÃ CÓ theo yêu cầu user mới → lập team chain rút gọn ↓
+  │     │     (loại request hạng nhất — KHÁC re-fix từ verdict tester ở nhánh FAIL bên dưới)
   │     └── phức tạp / multi-file / domain mới → lập team ↓
   │
   ├─ TeamCreate([researcher, planner, cto, builder, tester])  ← chọn tối thiểu cần
@@ -108,10 +111,17 @@ LEAD nhận user_request
 
 | Loại request | Vai cần | Bỏ qua |
 |---|---|---|
-| Xây mới multi-file / domain mới | researcher → planner → cto → builder → tester | — |
-| Sửa deliverable đã có | builder → tester | researcher/planner/cto |
+| Xây chi nhánh mới multi-file / domain mới | researcher → planner → cto → builder → tester | — |
+| **Sửa chi nhánh đã có theo yêu cầu user mới** (hạng nhất) | planner (light) → builder → tester | researcher/cto |
 | Chỉ thiết kế (chưa build) | researcher → planner → cto | builder/tester |
 | Yêu cầu rõ ràng, nhỏ, 1 stack | planner → builder → tester | researcher/cto |
+
+> **⚠️ "Sửa chi nhánh đã có theo yêu cầu user mới" ≠ re-fix từ verdict.** Đây là **loại request
+> hạng nhất** (user yêu cầu thay đổi một chi nhánh đang tồn tại — vd "thêm node X", "đổi roster") →
+> cần **planner light** chốt WHAT thay đổi rồi builder Edit phẫu thuật → tester verify. KHÁC với
+> nhánh FAIL trong LOOP (tester báo fail → builder re-fix bug) vốn không có user-request mới. Builder
+> ở loại này **đọc `projects/<branch>/` hiện có TRƯỚC**, Edit chính xác phần cần đổi, **KHÔNG ghi đè
+> toàn bộ** workflow.json/agents.
 
 **Gate cũ tan vào lead reasoning** (không còn node router):
 
