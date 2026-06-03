@@ -20,7 +20,6 @@
     {
       "id": "dv_verdict",
       "agent": "agents/dv_verdict.md",
-      "type": "router",
       "input": "{{test}}",
       "output_key": "verdict"
     },

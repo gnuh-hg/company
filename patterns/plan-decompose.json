@@ -16,7 +16,7 @@
   },
   "nodes": [
     { "id": "__P__planner",  "type": "work",   "input": "{{user_request}}", "output_key": "plan" },
-    { "id": "__P__classify", "type": "router", "input": "{{plan}}",          "output_key": "plan_depth" },
+    { "id": "__P__classify", "input": "{{plan}}",          "output_key": "plan_depth" },
     { "id": "__P__long",     "type": "work",   "input": "{{plan}}",          "output_key": "plan_result" },
     { "id": "__P__short",    "type": "work",   "input": "{{plan}}",          "output_key": "plan_result" }
   ],

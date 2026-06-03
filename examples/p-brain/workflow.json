@@ -13,14 +13,12 @@
     {
       "id": "rg_gate",
       "agent": "agents/rg_gate.md",
-      "type": "router",
       "input": "{{research}}",
       "output_key": "research_gate"
     },
     {
       "id": "cg_gate",
       "agent": "agents/cg_gate.md",
-      "type": "router",
       "input": "{{user_request}}",
       "output_key": "clarify_gate"
     },
@@ -34,7 +32,6 @@
     {
       "id": "pd_classify",
       "agent": "agents/pd_classify.md",
-      "type": "router",
       "input": "{{plan}}",
       "output_key": "plan_depth"
     },
@@ -55,14 +52,12 @@
     {
       "id": "dv_verdict",
       "agent": "agents/dv_verdict.md",
-      "type": "router",
       "input": "{{test}}",
       "output_key": "verdict"
     },
     {
       "id": "eg_gate",
       "agent": "agents/eg_gate.md",
-      "type": "router",
       "input": "{{user_request}}",
       "output_key": "escalate_gate"
     },

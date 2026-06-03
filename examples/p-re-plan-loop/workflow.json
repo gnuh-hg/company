@@ -13,7 +13,6 @@
     {
       "id": "rp_verdict",
       "agent": "agents/rp_verdict.md",
-      "type": "router",
       "input": "{{plan}}",
       "output_key": "plan_feedback"
     },

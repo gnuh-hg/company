@@ -16,7 +16,7 @@
   },
   "nodes": [
     { "id": "__P__researcher", "type": "work",   "input": "{{user_request}}",  "output_key": "research" },
-    { "id": "__P__gate",       "type": "router", "input": "{{research}}",       "output_key": "research_gate" },
+    { "id": "__P__gate",       "input": "{{research}}",       "output_key": "research_gate" },
     { "id": "__P__out",        "type": "work",   "input": "{{research}}",       "output_key": "research_result" },
     { "id": "__P__clarify",    "type": "work",   "input": "{{research}}",       "output_key": "clarify_request" }
   ],

@@ -13,7 +13,6 @@
     {
       "id": "pd_classify",
       "agent": "agents/pd_classify.md",
-      "type": "router",
       "input": "{{plan}}",
       "output_key": "plan_depth"
     },

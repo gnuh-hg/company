@@ -6,7 +6,6 @@
     {
       "id": "cg_gate",
       "agent": "agents/cg_gate.md",
-      "type": "router",
       "input": "{{user_request}}",
       "output_key": "clarify_gate"
     },

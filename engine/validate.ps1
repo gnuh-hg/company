@@ -246,21 +246,15 @@ function Test-Workflow {
         if ($okFrom -and $okTo) { $adj[$e.from].Add($e.to); $outEdg[$e.from].Add($e) }
     }
 
-    # --- Luật router vs node thường (theo cạnh ra hợp lệ) ---
+    # --- Luật cạnh ra (J2.1: routing = số cạnh ra / outdeg, không phải type) ---
+    # approval GIỮ NGUYÊN. Worker (kể cả node có field type="router" tồn-tại — tolerate J2.1):
+    #   outdeg ≥ 2 → điểm rẽ tự động: mọi cạnh ra cần 'when' (engine chọn theo nhãn dòng cuối).
+    #   outdeg ≤ 1 → đường thẳng: không bắt buộc 'when'.
+    # type="router" được tolerate (đọc được, coi như worker thường) — REJECT sẽ thêm ở J2.2.
     foreach ($id in $nodeById.Keys) {
         $node = $nodeById[$id]
         $outs = $outEdg[$id]
-        if ($node.type -eq 'router') {
-            if ($outs.Count -lt 2) {
-                $errors.Add("router '$id' cần ≥2 cạnh ra (hiện: $($outs.Count))")
-            }
-            foreach ($e in $outs) {
-                if ([string]::IsNullOrWhiteSpace($e.when)) {
-                    $errors.Add("router '$id' có cạnh ra '$id→$($e.to)' thiếu nhãn 'when'")
-                }
-            }
-        }
-        elseif ($node.type -eq 'approval') {
+        if ($node.type -eq 'approval') {
             # Gate (Phase D): phải tiếp tục sau khi duyệt → ≥1 cạnh ra. Nếu khai nhiều cạnh
             # (vd approve/reject) thì mỗi cạnh cần nhãn 'when' = quyết định (như router);
             # 1 cạnh ra duy nhất ('tiếp tục') không bắt buộc 'when'.
@@ -276,12 +270,14 @@ function Test-Workflow {
             }
         }
         else {
-            if ($outs.Count -gt 1) {
-                $errors.Add("node thường '$id' có $($outs.Count) cạnh ra (chỉ được ≤1; dùng type='router' để rẽ nhánh)")
-            }
-            foreach ($e in $outs) {
-                if (-not [string]::IsNullOrWhiteSpace($e.when)) {
-                    $errors.Add("node thường '$id' có cạnh ra '$id→$($e.to)' mang 'when'='$($e.when)' (chỉ router dùng 'when')")
+            # Worker (bao gồm node có type="router" cũ — tolerate J2.1, không lỗi khi gặp).
+            # outdeg ≥ 2 → điểm rẽ: mọi cạnh ra cần 'when'.
+            # outdeg ≤ 1 → đường thẳng: không kiểm when.
+            if (@($outs).Count -ge 2) {
+                foreach ($e in $outs) {
+                    if ([string]::IsNullOrWhiteSpace($e.when)) {
+                        $errors.Add("node '$id' có $(@($outs).Count) cạnh ra (điểm rẽ) nhưng cạnh '$id→$($e.to)' thiếu nhãn 'when'")
+                    }
                 }
             }
         }
@@ -318,14 +314,18 @@ function Test-Workflow {
                 # Nếu KHÔNG có → WARN (không phá workflow hợp lệ hiện có; exit = 0 như cũ).
                 if ($k -match '^(.+)_payload$') {
                     $baseKey = $Matches[1]
-                    $hasRouterForBase = $false
+                    # J2.1: kiểm bằng outdeg≥2 thay vì type='router' (routing = số cạnh ra).
+                    $hasBranchForBase = $false
                     foreach ($n2 in $nodes) {
-                        if ($n2.type -eq 'router' -and $n2.output_key -eq $baseKey) {
-                            $hasRouterForBase = $true; break
+                        if (-not [string]::IsNullOrWhiteSpace($n2.id) -and
+                            $n2.output_key -eq $baseKey -and
+                            $outEdg.ContainsKey($n2.id) -and
+                            @($outEdg[$n2.id]).Count -ge 2) {
+                            $hasBranchForBase = $true; break
                         }
                     }
-                    if (-not $hasRouterForBase) {
-                        $warnings.Add("node '$id': key '{{$k}}' dùng _payload nhưng không có router nào với output_key='$baseKey' — engine sẽ resolve '' (pre-seed); kiểm tra tên router.")
+                    if (-not $hasBranchForBase) {
+                        $warnings.Add("node '$id': key '{{$k}}' dùng _payload nhưng không có node rẽ nhánh (outdeg≥2) nào với output_key='$baseKey' — engine sẽ resolve '' (pre-seed); kiểm tra cấu trúc workflow.")
                     }
                     continue   # _payload dynamic — không error, bỏ qua data-cycle check
                 }

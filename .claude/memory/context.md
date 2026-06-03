@@ -28,3 +28,7 @@ Self-mod J.4 verify. Files đổi: engine/validate.ps1, engine/test-runner.ps1, 
 ## 2026-06-03 21:17 — J.5-final-verify-pass
 
 Self-mod J.5 (final) verify. Files đổi: README.md, CLAUDE.md, plan/hq-v2/ROADMAP.md, plan/hq-v2/phase-j/CHECKPOINT.md. Verdict: PASS. selftest 10/10, validate hello/branchy/loopy exit 0, run -Mock done. Docs: README có auto-inject + 2-phần; CLAUDE.md 4 rows cập nhật; ROADMAP Phase J ✅ DONE; CHECKPOINT 5/5 + 5 log entries. Phase J toàn bộ verified. Changelog draft gửi lead.
+
+## 2026-06-04 01:06 — J2.1-verify-pass
+
+Self-mod J2.1 verify. Files đổi: engine/workflow.ps1, engine/validate.ps1, 6 patterns/*.json, examples/{loopy,branchy,edit-demo,p-brain}/workflow.json. Verdict: PASS. selftest 10/10, validate hello/branchy/loopy/edit-demo/approval-demo exit 0, run branchy (tier:gt1000) + loopy (verdict:pass) -Mock done. grep type:router rỗng trong patterns+fixtures. Test-NodeBranches 9 occurrences. validate.ps1 tolerate type:router đúng thiết kế S1 (REJECT defer S2). .runs/ đã dọn. Vòng 1.

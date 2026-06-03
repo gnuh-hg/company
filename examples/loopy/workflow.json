@@ -5,7 +5,7 @@
   "nodes": [
     { "id": "build",   "agent": "agents/build.md",          "input": "{{user_request}}\n{{verdict}}", "output_key": "build" },
     { "id": "test",    "agent": "agents/test.md",           "input": "{{build}}",                     "output_key": "test" },
-    { "id": "verdict", "agent": "agents/verdict-router.md", "type": "router", "input": "{{test}}",   "output_key": "verdict" },
+    { "id": "verdict", "agent": "agents/verdict-router.md", "input": "{{test}}",   "output_key": "verdict" },
     { "id": "ship",    "agent": "agents/ship.md",           "input": "{{build}}\n{{test}}",           "output_key": "result" }
   ],
   "edges": [

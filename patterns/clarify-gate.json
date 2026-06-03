@@ -15,7 +15,7 @@
     "note": "Placeholder __P__ CHỈ ở node.id + edge.from/to. Gate kiểm tra info đủ để lập kế hoạch chưa: 'ok' sang plan, 'missing_input' escalate xin bổ sung. Gate là entry (router làm node vào — precedent branchy). Data key là tên thật; host lo namespace. Host bind agent agents/<stamped-id>.md + cấp name/entry/max_steps."
   },
   "nodes": [
-    { "id": "__P__gate",     "type": "router", "input": "{{user_request}}", "output_key": "clarify_gate" },
+    { "id": "__P__gate",     "input": "{{user_request}}", "output_key": "clarify_gate" },
     { "id": "__P__out",      "type": "work",   "input": "{{user_request}}", "output_key": "clarify_result" },
     { "id": "__P__escalate", "type": "work",   "input": "{{user_request}}", "output_key": "clarify_escalation" }
   ],

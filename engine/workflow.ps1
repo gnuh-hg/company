@@ -51,8 +51,8 @@ function Initialize-Context {
     foreach ($n in $Graph.nodes) {
         $k = $n.output_key
         if (-not [string]::IsNullOrWhiteSpace($k) -and -not $ctx.ContainsKey($k)) { $ctx[$k] = '' }
-        # J.3: Pre-seed <output_key>_payload = "" cho router nodes (loop-feedback an toàn như output_key).
-        if ($n.type -eq 'router' -and -not [string]::IsNullOrWhiteSpace($k)) {
+        # J.3: Pre-seed <output_key>_payload = "" cho branching nodes (outdeg≥2, J2.1: thay type-eq-router).
+        if ((Test-NodeBranches $Graph $n.id) -and -not [string]::IsNullOrWhiteSpace($k)) {
             $pk = "${k}_payload"
             if (-not $ctx.ContainsKey($pk)) { $ctx[$pk] = '' }
         }
@@ -118,7 +118,8 @@ function Select-NextNode {
     # trực tiếp ($node.type / $e.when), KHÔNG dùng Get-Prop (PSObject.Properties không liệt kê
     # key của hashtable, sẽ trả $null nhầm → router rơi xuống nhánh node thường).
     $node = $Graph.nodeById[$NodeId]
-    if ($node.type -eq 'router') {
+    # J2.1: Routing theo số cạnh ra (outdeg≥2), không theo type. approval handled separately by executor.
+    if (Test-NodeBranches $Graph $NodeId) {
         $label = ConvertTo-RouterLabel $Output
         foreach ($e in $outs) {
             $when = $e.when
@@ -216,6 +217,27 @@ function Get-RouterPayload {
     if ($lastIdx -le 0) { return '' }
     # Payload = các dòng trước nhãn, bỏ blank cuối
     return ($lines[0..($lastIdx - 1)] -join "`n").TrimEnd()
+}
+
+function Test-NodeBranches {
+    <#
+    .SYNOPSIS
+        Returns $true if node $NodeId has ≥2 outgoing edges in $Graph (edge-based routing, J2.1).
+    .DESCRIPTION
+        Phase J2.1 (CD-2): Replaces all `$node.type -eq 'router'` checks. A node with ≥2 outgoing
+        edges automatically becomes a branching point — engine bơm choices, node in nhãn dòng cuối,
+        engine chọn cạnh. Node ≤1 cạnh đi thẳng (không cần nhãn). `approval` handled separately.
+        StrictMode-safe: wraps adj lookup in @() before .Count to guard against $null.
+        Dot-source-safe: pure function, does not self-execute when dot-sourced.
+    .OUTPUTS [bool] $true nếu outdeg ≥ 2.
+    #>
+    param(
+        [Parameter(Mandatory)]$Graph,
+        [Parameter(Mandatory)][string]$NodeId
+    )
+    if ($null -eq $Graph) { return $false }
+    if (-not $Graph.adj.ContainsKey($NodeId)) { return $false }
+    return @($Graph.adj[$NodeId]).Count -ge 2
 }
 
 function Get-AgentFrontmatter {
@@ -389,8 +411,8 @@ function Invoke-Workflow {
             if (Test-Path -LiteralPath $outPath) {
                 $restored = (Get-Content -LiteralPath $outPath -Raw -Encoding utf8)
                 $context[$k] = $restored
-                # J.3: Restore _payload cho router nodes khi resume (tính lại từ output đã lưu).
-                if ($n.type -eq 'router') {
+                # J.3: Restore _payload cho branching nodes khi resume (J2.1: outdeg≥2, thay type-eq-router).
+                if (Test-NodeBranches $graph $n.id) {
                     $context["${k}_payload"] = Get-RouterPayload $restored
                 }
             }
@@ -600,10 +622,11 @@ function Invoke-Workflow {
         $agentPath = Join-Path $ProjectDir $node.agent
         $prompt    = Resolve-Prompt $node.input $context
 
-        # J.1 (CD-2): Bơm suffix "chọn MỘT nhãn" vào prompt router real-mode.
+        # J.1 (CD-2): Bơm suffix "chọn MỘT nhãn" vào prompt branching node real-mode.
+        # J2.1: dùng Test-NodeBranches thay type-eq-router (routing theo số cạnh ra).
         # Mock-path bất biến: ENGINE_MOCK_ROUTER trả nhãn trực tiếp, không cần suffix.
         # Guard if (-not $Mock) để đảm bảo mock-path không bị ảnh hưởng.
-        if ($node.type -eq 'router' -and -not $Mock) {
+        if ((Test-NodeBranches $graph $cursor) -and -not $Mock) {
             $routerChoices = Get-RouterChoices $graph $cursor
             if ($routerChoices.Count -gt 0) {
                 $choiceStr = $routerChoices -join ' | '
@@ -652,9 +675,10 @@ function Invoke-Workflow {
             throw "Workflow '$($graph.name)' dừng tại node '$cursor' (seq $seq): $errMsg (resume: run.ps1 resume $($graph.name))"
         }
 
-        # J.2: Validate nhãn router real-mode → Write-RouteIssue + throw fail-fast (KHÔNG retry).
+        # J.2: Validate nhãn branching node real-mode → Write-RouteIssue + throw fail-fast (KHÔNG retry).
+        # J2.1: dùng Test-NodeBranches thay type-eq-router.
         # Guard if (-not $Mock): mock-path bất biến (ENGINE_MOCK_ROUTER trả nhãn hợp lệ, skip validate).
-        if ($node.type -eq 'router' -and -not $Mock) {
+        if ((Test-NodeBranches $graph $cursor) -and -not $Mock) {
             $routerLabel  = ConvertTo-RouterLabel $output
             $validChoices = Get-RouterChoices $graph $cursor
             if ($validChoices.Count -gt 0 -and $routerLabel -notin $validChoices) {
@@ -672,10 +696,10 @@ function Invoke-Workflow {
         if (-not [string]::IsNullOrWhiteSpace($node.output_key)) {
             Set-Content -LiteralPath (Join-Path $runDir "$($node.output_key).txt") -Value $output -Encoding utf8
             $context[$node.output_key] = $output
-            # J.3: Auto-store <output_key>_payload cho router nodes. Node successor dùng {{<key>_payload}}.
-            # Tương thích ngược: router chỉ in nhãn → Get-RouterPayload = "" → pre-seed bình thường.
-            # Áp dụng cả Mock (payload = "" cho mock router 1-dòng) và real-mode.
-            if ($node.type -eq 'router') {
+            # J.3: Auto-store <output_key>_payload cho branching nodes (J2.1: outdeg≥2, thay type-eq-router).
+            # Tương thích ngược: branching node chỉ in nhãn → Get-RouterPayload = "" → pre-seed bình thường.
+            # Áp dụng cả Mock (payload = "" cho mock 1-dòng) và real-mode.
+            if (Test-NodeBranches $graph $cursor) {
                 $context["$($node.output_key)_payload"] = Get-RouterPayload $output
             }
         }

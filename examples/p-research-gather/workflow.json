@@ -13,7 +13,6 @@
     {
       "id": "rg_gate",
       "agent": "agents/rg_gate.md",
-      "type": "router",
       "input": "{{research}}",
       "output_key": "research_gate"
     },

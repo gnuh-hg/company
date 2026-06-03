@@ -16,7 +16,7 @@
   "nodes": [
     { "id": "__P__builder", "type": "work",   "input": "{{user_request}}\n{{verdict}}", "output_key": "build" },
     { "id": "__P__tester",  "type": "work",   "input": "{{build}}",                     "output_key": "test" },
-    { "id": "__P__verdict", "type": "router", "input": "{{test}}",                       "output_key": "verdict" },
+    { "id": "__P__verdict", "input": "{{test}}",                       "output_key": "verdict" },
     { "id": "__P__done",    "type": "work",   "input": "{{build}}\n{{test}}",            "output_key": "result" }
   ],
   "edges": [

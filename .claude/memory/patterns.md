@@ -28,3 +28,7 @@ Session J.4: engine/test-runner.ps1 thêm mục #10 `branchy/2-part-protocol` (s
 ## 2026-06-03 21:17 — J.5-docs-closeout
 
 Session J.5 (final close-out): README.md thêm §"Router choices auto-inject" + §"Giao thức 2-phần: payload + nhãn route". CLAUDE.md sửa 4 hàng: workflow.ps1 (3 hàm J), test-runner.ps1 (10 mục), validate.ps1 (_payload warn), phase-j (✅ DONE 2026-06-03). ROADMAP Phase J = ✅ DONE. CHECKPOINT 5/5 sessions done + 5 log entries. selftest 10/10, validate hello/branchy/loopy exit 0, run -Mock done. Phase J hoàn thành.
+
+## 2026-06-04 01:06 — J2.1-edge-routing-pass
+
+Session J2.1: engine/workflow.ps1 thêm `Test-NodeBranches $Graph $NodeId` (line ~70, outdeg≥2, dot-source-safe) + thay 6 chỗ `$node.type -eq 'router'` → `Test-NodeBranches` (pre-seed _payload, Select-NextNode, resume restore, bơm choices, validate-nhãn, store _payload). validate.ps1 rewrite luật out-edge (outdeg-based, TẠM tolerate type:router). Migrate gỡ `type:"router"` khỏi 6 patterns/*.json + examples/{loopy,branchy,edit-demo,p-brain}/workflow.json. selftest 10/10, validate hello/branchy/loopy/edit-demo/approval-demo exit 0, run branchy -Mock (tier:gt1000) + loopy -Mock (verdict:pass) done, grep type:router rỗng. Test-NodeBranches count=9 (≥7 yêu cầu).

@@ -15,7 +15,7 @@
   },
   "nodes": [
     { "id": "__P__planner", "type": "work",   "input": "{{user_request}}\n{{plan_feedback}}", "output_key": "plan" },
-    { "id": "__P__verdict", "type": "router", "input": "{{plan}}",                              "output_key": "plan_feedback" },
+    { "id": "__P__verdict", "input": "{{plan}}",                              "output_key": "plan_feedback" },
     { "id": "__P__proceed", "type": "work",   "input": "{{plan}}",                              "output_key": "plan_result" }
   ],
   "edges": [

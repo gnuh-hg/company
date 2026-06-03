@@ -116,6 +116,13 @@
 - **Phụ thuộc:** engine v2 hiện tại. Độc lập K. Nên trước/cùng I (mở khoá handoff-output).
 - **Done-gate:** router với nhãn bơm chọn đúng nhánh; agent in sai → re-ask → phục hồi (demo mock + 1 real); drift prose↔edges không còn vỡ (xoá nhãn khỏi `.md` agent vẫn chạy); mock-path + regression bất biến.
 
+### Phase J2 — Gộp worker+router → routing theo CẠNH (CD-2 extension)
+- **Mục tiêu:** làm nốt "nửa trên" CD-2 — bỏ `type: "router"` như loại node; routing là tính chất của graph (số cạnh ra), không phải của node. Mọi node = worker; node ≥2 cạnh ra (mỗi cạnh `when`) tự động là điểm rẽ. `approval` giữ riêng.
+- **Xây gì:** helper `Test-NodeBranches` (outdeg≥2) thay 6 chỗ `type -eq 'router'` trong `workflow.ps1`; `validate.ps1` luật cạnh theo outdeg + **reject** `type:"router"`; `viz/graph` render rẽ theo số cạnh; migrate sạch 6 `patterns/*.json` + fixture (loopy/branchy/edit-demo/p-brain). 2 session (S1 executor+migrate, validate tạm tolerate; S2 validate reject+viz+docs).
+- **Quyết định user (2026-06-03):** gộp worker+router; hard-remove (validate báo lỗi nếu gặp type:router); `approval` đứng ngoài. Self-mod chain + user-approval diff.
+- **Phụ thuộc:** Phase J (đã DONE). Độc lập I/K/L.
+- **Done-gate:** selftest 10/10 (2 session); `Test-NodeBranches` tồn tại; validate reject type:router; grep type:router rỗng trong patterns/examples; mock-path bất biến.
+
 ### Phase K — HITL hợp nhất: pause-policy + hỏi-user (issue 3, CD-3)
 - **Mục tiêu:** node agent có 3 trạng thái dừng (none/always/ask); thêm khả năng Claude **hỏi user giữa chừng** rồi tiếp tục với câu trả lời.
 - **Xây gì:** field `pause: none|always|ask` trên node (hoặc gộp vào schema node sẵn); `always` tái dùng `awaiting` (approval Phase D); `ask` → agent phát tín hiệu có cấu trúc (vd `ASK_USER: <câu hỏi>`) → engine pause trạng thái MỚI **`awaiting_input`** → resume nhận **free-text** → tiêm vào context (key mới, vd `{{user_answer}}`) → chạy tiếp; event mới (`awaiting_input` hoặc `awaiting` + `kind`); `validate` cho `pause`; headless `-AutoApprove` mở rộng (auto-skip ask hoặc fail-rõ).
@@ -179,6 +186,7 @@ CD-1 / CD-2 / CD-3 (đã chốt 2026-06-02)
 | H — HQ team-of-agents native (#1) | `plan/hq-v2/phase-h/` | ✅ DONE (2026-06-03). 11 session H.0–H.10 + reframe Q2 (build trực tiếp/prose/legacy xóa) + Q3 (HQ dựng CHI NHÁNH, không build app; engine+catalog là vật-liệu HQ). **H.10 chạy thật PASS**: lead drive TaskList loop, 5 teammate (researcher→planner→cto→builder→tester) dựng chi nhánh `projects/todo-web/` (workflow.json 5 node + roster từ catalog/), tester `CHECK_RESULT: pass` (validate exit 0 + run -Mock done + check). selftest 9/9, engine diff rỗng. Xem `phase-h/CHECKPOINT.md`. |
 | I — Tối ưu token chi nhánh (#2) | `plan/hq-v2/phase-i/` | 📋 Chưa làm — gồm ⭐ handoff-output (khoá với J) |
 | J — Rẽ nhánh chủ động (CD-2) | `plan/hq-v2/phase-j/` | ✅ DONE (2026-06-03). 5 session hoàn thành: J.1 `Get-RouterChoices`+bơm suffix · J.2 `Write-RouteIssue`+fail-fast · J.3 `Get-RouterPayload`+`_payload` auto-store · J.4 fixture branchy 2-phần+validate warn+selftest #10 (10 mục) · J.5 docs. Mock-path bất biến. selftest 10/10 PASS. Xem `plan/hq-v2/phase-j/CHECKPOINT.md`. |
+| J2 — Gộp worker+router (routing theo cạnh, CD-2 ext) | `plan/hq-v2/phase-j2/` | 📋 Soạn xong, CHƯA thực thi (2026-06-03). 2 session: J2.1 executor edge-based (`Test-NodeBranches`)+migrate fixtures/patterns · J2.2 validate reject type:router+viz/graph+docs. Self-mod chain. |
 | K — HITL pause-policy + hỏi-user (#3, CD-3) | `plan/hq-v2/phase-k/` | 📋 Chưa làm |
 | L — App UX layout + I/O + form (#4+#5) | `plan/hq-v2/phase-l/` | 📋 Chưa làm |
 | S — HQ self-modification + branch-edit hạng nhất (vai #2+#3) | `plan/hq-v2/phase-s/` | ✅ DONE (2026-06-03, S.6 skip). Deliverable: design.md + branch-edit hạng nhất + skill self-modify + agent hq-self-builder + agent hq-self-tester + wiring hq-master/playbook/CLAUDE.md. |

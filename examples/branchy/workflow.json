@@ -3,7 +3,7 @@
   "entry": "tier",
   "max_steps": 30,
   "nodes": [
-    { "id": "tier",   "agent": "agents/tier-router.md", "type": "router", "input": "{{user_request}}", "output_key": "tier" },
+    { "id": "tier",   "agent": "agents/tier-router.md", "input": "{{user_request}}", "output_key": "tier" },
     { "id": "d20",    "agent": "agents/disc.md",   "input": "{{user_request}}\n20%", "output_key": "discount" },
     { "id": "d10",    "agent": "agents/disc.md",   "input": "{{user_request}}\n10%", "output_key": "discount" },
     { "id": "d5",     "agent": "agents/disc.md",   "input": "{{user_request}}\n5%",  "output_key": "discount" },
