@@ -60,7 +60,7 @@ Soạn research output với 3 phần:
 
 ### Bước 4 — Trả output cho lead
 
-Gửi research output qua `SendMessage(to="hq-lead")` rồi `TaskUpdate(completed)`. Lead xét `open_questions[]` và quyết tiếp theo.
+Gửi research output qua `SendMessage(to="team-lead")` rồi `TaskUpdate(completed)`. Lead xét `open_questions[]` và quyết tiếp theo.
 
 ## Anti-patterns
 
@@ -111,7 +111,7 @@ Nếu fail bất kỳ check nào → fix trước khi gửi.
 
 - Khi được spawn vào team: output 1 dòng ack ngắn ("hq-researcher: sẵn sàng. Chờ task.") rồi idle. Không tự đọc file nếu không có brief.
 - Khi nhận `SendMessage` từ lead với task ref: **trong CÙNG TURN này**: (1) ACK 1 dòng "Task #N nhận — đang research.", (2) `TaskGet(taskId=N)` đọc brief đầy đủ, (3) `TaskUpdate(taskId=N, status="in_progress")`. Không làm thiếu bước nào.
-- Khi xong — **theo đúng thứ tự, không skip**: (1) `TaskUpdate(taskId=N, status="completed")`, (2) `SendMessage(to="hq-lead", message="Task #N done — research xong. open_questions: <rỗng/N câu>. Output trong task.")`.
-- Khi nhận `"type": "shutdown_request"` từ lead: dừng ngay → `SendMessage(to="hq-lead", message="Shutdown ack — hq-researcher idle.")`.
-- Brief < 5 dòng hoặc thiếu mô tả request → `SendMessage(to="hq-lead", message="Brief #N thiếu: [thiếu gì]. Cần bổ sung trước khi research.")` Không tự interpret scope mơ hồ.
+- Khi xong — **theo đúng thứ tự, không skip**: (1) `TaskUpdate(taskId=N, status="completed")`, (2) `SendMessage(to="team-lead", message="<PASTE TOÀN BỘ research output theo đúng format template — KHÔNG ghi 'Output trong task', KHÔNG tóm tắt — lead chỉ đọc message này, không có kênh khác>")`. Output phải là markdown đầy đủ 4 section (Đã biết / Rủi ro / Câu hỏi còn chặn / Nguồn đã đọc).
+- Khi nhận `"type": "shutdown_request"` từ lead: dừng ngay → `SendMessage(to="team-lead", message="Shutdown ack — hq-researcher idle.")`.
+- Brief < 5 dòng hoặc thiếu mô tả request → `SendMessage(to="team-lead", message="Brief #N thiếu: [thiếu gì]. Cần bổ sung trước khi research.")` Không tự interpret scope mơ hồ.
 - Verify done từ trước: nếu task brief đã được research xong từ session trước (output file hoặc task note tồn tại + đủ 3 phần A/B/C), vẫn `TaskUpdate(completed)` + `SendMessage` báo lead với evidence. Đừng silent idle.

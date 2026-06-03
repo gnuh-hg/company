@@ -20,26 +20,131 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 11 (H.0–H.10) | 4 (H.0–H.3) + reframe Q2 | ~36% |
+| Sessions hoàn thành | 11 (H.0–H.10) | 10 (H.0–H.9) + reframe Q2 | ~91% |
 | design.md (9 mục) | 1 | 1 ✅ (rewrite Q2) | 100% |
-| Teammate def (`.claude/agents/hq-*`) | 5 | 2 ✅ (researcher, planner — **soạn lại form prose Q2**) | 40% |
-| Skill project-scope | 2 (`build-verify`+`hq-memory`) | 0 | 0% |
-| Nền (flag+memory+playbook) | 3 artifact | 3 ✅ (cập nhật Q2) | 100% |
-| Done-gate checklist | 11 tick | 4 (design.md + flag/CC-ver + memory-store + researcher+planner prose) | 36% |
-| Regression | PASS mỗi session | **PASS (reframe Q2, selftest 10/10)** | — |
+| Teammate def (`.claude/agents/hq-*`) | 5 | 5 ✅ (researcher, planner, cto, builder, tester — **form prose**) | 100% |
+| Skill project-scope | 2 (`build-verify`+`hq-memory`) | 2 ✅ (`build-verify` + `hq-memory`) | 100% |
+| Nền (flag+memory+playbook) | 3 artifact | 3 ✅ (playbook đầy đủ H.9) | 100% |
+| Done-gate checklist | 11 tick | 10 (design.md + flag/CC-ver + memory-store + 5 teammate + 2 skill + playbook đầy đủ) | 91% |
+| Regression | PASS mỗi session | **PASS (H.9, selftest 9/9)** | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: H-B (Teammate — mỗi session 1 agent). **Vừa xong reframe Q2** (giữa H-B): xóa legacy + sửa toàn bộ plan/doc + soạn lại researcher+planner form prose.
-- **Session kế tiếp**: H.4 — soạn `.claude/agents/hq-cto.md` (HOW — **thiết kế kỹ thuật VĂN XUÔI**: cấu trúc file/cách tiếp cận/công nghệ; tham khảo `catalog/` tùy chọn; **KHÔNG build-spec JSON, KHÔNG lắp workflow.json**); đầu ra prose đủ để builder Write/Edit trực tiếp; đạt checklist (a)–(d) trong PLAN.md §H-B (đã rewrite Q2).
-- **Blocker**: KHÔNG còn
-- **Reference**: `PLAN.md` Phase H-B → Session H.4 (đã rewrite Q2); `design.md` §1/§2/§5 (flow + roster `hq-cto` prose). KHÔNG còn `hq/build-spec.md` (đã xóa).
+- **Phase**: H-D (Lead + chạy thật). H.9 xong, còn H.10.
+- **Session kế tiếp**: H.10 — Done-gate: chạy thật end-to-end (USER-GATE, đốt token). Lead spawn team → research → plan → cto → builder Write/Edit → tester check khách quan → record memory. Xác nhận với user trước khi chạy.
+- **Blocker**: USER-GATE (H.10 đốt token, cần user xác nhận)
+- **Reference**: `PLAN.md` Phase H-D → Session H.10; `design.md` §9 done-gate checklist.
 
 ---
 
 ## Per-session log
+
+### 2026-06-02 — Session H.9 — Playbook đầy đủ + team-issues-queue + hq-master
+
+- **Done**: đổ nội dung đầy đủ `playbook.md` (6 mục) + tạo `team-issues-queue.md` + cập nhật `hq-master.md`.
+  - **playbook.md §1 When-to-team**: bảng 5 tình huống (spawn full / tự xử / builder+tester / researcher+planner+cto / tối thiểu) + quy tắc size 3–5 + 4 dấu hiệu cần spawn.
+  - **playbook.md §2 Lifecycle**: spawn+brief template (4 field bắt buộc) → ack-cùng-turn → TaskUpdate in_progress→completed → shutdown_request → vòng re-fix/re-plan + escalation sau N vòng fail.
+  - **playbook.md §3 Anti-pattern**: bảng 5 lead anti-pattern (lead-DIY / spawn thừa / brief thiếu done-criteria / không chờ ack / tự accept verdict) + bảng 7 teammate anti-pattern (JSON/silent/tự thoát/phán cảm tính/nhầm store/engine-build/stale context) + protocol tránh stale-context khi re-spawn.
+  - **playbook.md §4 Issue queue**: trỏ `team-issues-queue.md` + format mỗi issue (date/code/slug + 5 field) + bảng 8 code phân loại (SILENT/STALE/FORM/SCOPE/GATE/STORE/BUILD/OTHER).
+  - **playbook.md §5 Build-deliverable contract**: trỏ skill `build-verify` + tóm tắt builder workflow (projects/<name>/, Write/Edit, Bash, KHÔNG engine-build) + tester workflow (exit-code, CHECK_RESULT) + note engine = tool đứng riêng ngoại lệ.
+  - **playbook.md §6 Memory protocol**: trỏ skill `hq-memory` + bảng 4 file store HQ-team (ai ghi / khi nào) + cảnh báo KHÔNG nhầm engine store + lệnh đọc cap N=10 + lệnh ghi `>>` (không `>`).
+  - **team-issues-queue.md**: tạo file header + comment placeholder (rỗng — chưa có issue).
+  - **hq-master.md**: cập nhật toàn bộ — flow động ASCII đầy đủ (classification → spawn → teammate chain → verdict → shutdown) + bảng gate-cũ-tan-vào-lead + bảng roster cập nhật (bỏ cột "Session đẻ") + bảng trỏ tài liệu 6 hàng (playbook / issue-queue / build-verify / hq-memory / memory store / design.md).
+- **Output**: `company/.claude/teams/playbook.md` (đầy đủ 6 mục) · `company/.claude/team-issues-queue.md` · `company/.claude/hq-master.md` (cập nhật).
+- **STOP gate**:
+  - (a) playbook đủ 6 mục, không còn `_TODO H.9_`: ✅ (6/6 mục có nội dung thật)
+  - (b) flow request→research→plan→build→test→record mô tả ĐỘNG (không DAG), ánh xạ rõ teammate: ✅ (ASCII flow diagram đầy đủ trong hq-master.md + §1 playbook)
+  - (c) build-trực-tiếp + verify-khách-quan nêu trong §5 + §3 anti-pattern: ✅ (nhắc KHÔNG engine-build nhiều chỗ)
+  - (d) `team-issues-queue.md` tạo (header + format): ✅
+- **Regression**: validate hello exit 0 ✅ · run hello "x" -Mock done ✅ · selftest 9/9 PASS ✅ · `git diff engine/` rỗng ✅. Dọn `.runs/` test ✅
+- **Next**: Session H.10 — chạy thật end-to-end (USER-GATE). Cần user xác nhận trước khi đốt token.
+- **Notes**: Playbook §2 lifecycle template brief 4-field (user_request / context / done_criteria / output_format) đủ cho mọi teammate dùng ngay. §3 anti-pattern bảng kép (lead + teammate) — tách rõ ai làm gì sai. Code issue queue (SILENT/STALE/FORM/...) giúp track pattern lỗi qua nhiều lần chạy. hq-master.md nay = tài liệu hoàn chỉnh (không còn skeleton), lead đọc là đủ để bắt đầu spawn team.
+
+### 2026-06-02 — Session H.8 — Skill `hq-memory`
+
+- **Done**: soạn `.claude/skills/hq-memory/SKILL.md`.
+  - Frontmatter: `name: hq-memory`, description 1 dòng nêu đọc/ghi + cảnh báo store tách bạch.
+  - Body 5 mục: §1 Phân biệt 2 store (bảng `.claude/memory/` vs `company/memory/`, quy tắc vàng không trộn) · §2 Đọc memory (khi nào / ai đọc file nào / cap N=10 / lệnh cat + xử lý file rỗng) · §3 Ghi memory (format bắt buộc `## YYYY-MM-DD HH:MM — slug` + bảng vai-trò→file + 2 template ví dụ + lệnh `>>` append + cảnh báo không dùng `>`) · §4 Quick reference (compact 2 block đọc/ghi + 4 dòng rule) · §5 Ranh giới (bảng "không làm" 6 hàng: engine store / per-branch store / Write overwrite / thiếu delimiter / builder ghi / memory thay brief).
+  - Điểm đặc trưng: §1 đặt cảnh báo store ở đầu tiên (trước cả quy ước đọc/ghi) — đây là lỗi cao nhất. §3 bảng "Ai ghi gì" map rõ tester-fail→mistakes/tester-pass→patterns/tester-luôn→context/lead→context+global. §5 bảng ranh giới nhấn mạnh `>>` vs `>`.
+- **Output**: `.claude/skills/hq-memory/SKILL.md`.
+- **Self-review STOP gate**:
+  - (a) Frontmatter hợp lệ: name/description đủ, cảnh báo store tách bạch trong description ✅
+  - (b) Quy ước đọc (đầu task): §2 có bảng ai-đọc-file-nào + cap N=10 + lệnh cat ✅
+  - (c) Quy ước ghi (cuối task, format đo được): §3 có format `## YYYY-MM-DD HH:MM — slug` + bảng vai→file + 2 template + lệnh `>>` ✅
+  - (d) Cảnh báo KHÔNG nhầm với `company/memory/`: §1 bảng 2-store + §5 bảng ranh giới ✅
+- **Regression**: validate hello exit 0 ✅ · run hello "x" -Mock done ✅ · selftest 9/9 PASS ✅ · `git diff engine/` = 0 byte ✅. Dọn `.runs/` test ✅
+- **Next**: Session H.9 — playbook đầy đủ (6 mục) + team-issues-queue.md + cập nhật hq-master.md.
+- **Notes**: Skill này mirror schema engine memory (`company/memory/`) về format delimiter + cap N, nhưng store khác hoàn toàn. Cap N=10 là convention đọc (không enforce khi ghi — file giữ toàn bộ lịch sử). Template 2 ví dụ (fail + pass) giúp tester dùng ngay mà không phải nghĩ format. `>>` vs `>` được nhắc 2 lần (§3 + §5) vì đây là lỗi mất data không phục hồi.
+
+### 2026-06-02 — Session H.7 — Skill `build-verify`
+
+- **Done**: soạn `.claude/skills/build-verify/SKILL.md`.
+  - Frontmatter: `name: build-verify`, description 1 dòng nêu rõ mục đích (build trực tiếp + verify khách quan) + đối tượng (builder + tester HQ-team).
+  - Body 5 mục: §1 Nơi ghi + cấu trúc (`projects/<name>/`, gitignored, bảng cấu trúc theo loại, README bắt buộc) · §2 Builder — workflow 5 bước + anti-patterns · §3 Tester — workflow 5 bước (chạy check, map done-criteria, in `CHECK_RESULT:`) + bảng ví dụ + xử lý khi không có test tự động + anti-patterns · §4 Ranh giới — bảng "KHÔNG làm + lý do" + ngoại lệ engine-tool khi request cụ thể dựng pipeline · §5 Quick reference (2-khối compact cho builder/tester).
+  - Điểm đặc trưng: §3 bảng map done-criteria → lệnh → exit-code → pass/fail (nhất quán với hq-tester.md Bước 3); `CHECK_RESULT:` format máy-đọc-được nhắc lại; §4 khẳng định KHÔNG `run.ps1 autobuild/autofix/build` trong bảng cấm.
+- **Output**: `.claude/skills/build-verify/SKILL.md`.
+- **Self-review STOP gate**:
+  - (a) Frontmatter hợp lệ: name/description đủ, không có tools/model (skill không cần) ✅
+  - (b) Mục "nơi ghi + cấu trúc": §1 có `projects/<name>/`, gitignored, bảng cấu trúc, README ✅
+  - (c) Mục "verify khách quan": §3 có workflow 5 bước + bảng done-criteria + `CHECK_RESULT: pass|fail (...)` ✅
+  - (d) Mục "ranh giới": §4 bảng "KHÔNG làm" rõ, KHÔNG tham chiếu engine-build làm đường build ✅
+- **Regression**: validate hello exit 0 ✅ · run hello "x" -Mock done ✅ · selftest 9/9 PASS ✅ · `git diff engine/` = 0 byte ✅. Dọn `.runs/` test ✅
+- **Next**: Session H.8 — `hq-memory` skill (đọc/ghi `.claude/memory/`).
+- **Notes**: Skill được thiết kế để cả builder lẫn tester đọc — §2 dành cho builder, §3 dành cho tester; §4 ranh giới dùng chung. Quick reference §5 compact giúp teammate check nhanh mà không cần đọc lại cả skill. `CHECK_RESULT:` lặp lại từ hq-tester.md — intentional (skill là nguồn sự thật, teammate là consumer).
+
+### 2026-06-02 — Session H.6 — `hq-tester.md` teammate
+
+- **Done**: soạn `.claude/agents/hq-tester.md`.
+  - Frontmatter: `name: hq-tester`, `tools: [Read, Bash]` (tester cần đọc file + chạy lệnh test/build/lint — KHÔNG Write/Edit), `model: claude-sonnet-4-6`, description 1 dòng nêu rõ check khách quan + KHÔNG run.ps1 + KHÔNG phán cảm tính.
+  - Body: mission 1 câu ("xác nhận deliverable đạt done-criteria bằng bằng chứng khách quan") → Đọc đầu phiên 4 bước → Workflow chính 5 bước (đọc brief / chạy check deliverable / map done-criteria theo bảng / in CHECK_RESULT + ghi memory / báo lead) → Anti-patterns (8 bullet: no-cảm-tính/no-run.ps1/skip-test=fail/ghi-memory-cả-hai/không-đụng-company-memory/tester-không-Write-Edit/CHECK_RESULT-bắt-buộc/map-toàn-bộ-done-criteria) → Output format (template bảng done-criteria + CHECK_RESULT) → Quality gate 7 checkbox → TeamCreate mode đầy đủ (7 bullet: spawn-ack/TaskGet/TaskUpdate/SendMessage/shutdown/brief-thiếu-guard/re-verify-toàn-bộ/verify-done-prior).
+  - Điểm đặc trưng tester: Bước 2 có ví dụ lệnh theo từng stack (npm/pytest/go); Bước 3 là bảng map done-criteria → bằng chứng → pass/fail; `CHECK_RESULT:` in đầu verdict (máy đọc được).
+- **Output**: `.claude/agents/hq-tester.md`.
+- **Self-review checklist (a)–(d)**:
+  - (a) frontmatter hợp lệ: name/description/tools (Read+Bash — đúng quyền tester: chạy lệnh được, không ghi file)/model đúng ✅
+  - (b) body team agent thực thụ (KHÔNG 5-mục node): mission + Đọc đầu phiên + Workflow chính 5 bước + Anti-patterns + Output format + Quality gate + TeamCreate mode ✅
+  - (c) TeamCreate mode ≥6 bullet: spawn-ack · TaskGet · TaskUpdate in_progress→completed · SendMessage khi xong · shutdown_request · verify-done-from-prior-session + re-verify-toàn-bộ-sau-fix (7 bullet) ✅
+  - (d) self-review ghi vào CHECKPOINT (mục này) ✅
+- **Gate**: (a)–(d) đạt ✅; gate khách quan dựa exit-code/output thật (không cảm tính) nêu nhiều chỗ ✅; KHÔNG `run.ps1 check/trial` nêu trong intro + anti-patterns ✅; đường ghi memory rõ (Bước 4: patterns.md pass / mistakes.md fail / context.md luôn) ✅; `CHECK_RESULT:` format máy đọc được ✅
+- **Regression**: validate hello exit 0 ✅ · run hello "x" -Mock done ✅ · selftest 9/9 PASS ✅ · `git diff engine/` = 0 byte ✅. Dọn `.runs/` test ✅
+- **Next**: Session H.7 — `build-verify` skill (quy ước build trực tiếp + verify khách quan).
+- **Notes**: Tester là teammate read+run-only (không ghi deliverable). `CHECK_RESULT:` là tín hiệu đặc trưng của tester — format máy đọc được giúp lead/automation phân tích verdict mà không cần parse prose. Bảng done-criteria ở Bước 3 là "hợp đồng" giữa builder và tester — toàn bộ done-criteria phải map, không cherry-pick.
+
+### 2026-06-02 — Session H.5 — `hq-builder.md` teammate
+
+- **Done**: soạn `.claude/agents/hq-builder.md`.
+  - Frontmatter: `name: hq-builder`, `tools: [Read, Write, Edit, Bash]` (builder cần ghi file + chạy build), `model: claude-sonnet-4-6`, description 1 dòng nêu rõ build trực tiếp + KHÔNG autobuild/workflow.json/engine.
+  - Body: mission 1 câu ("biến thiết kế thành file thật") → Đọc đầu phiên 4 bước → Workflow chính 5 bước (đọc brief / chuẩn bị workspace / Write+Edit files / smoke-check / báo tester) → Anti-patterns (9 bullet: no-autobuild/no-workflow.json/no-engine/no-tự-suy-thiết-kế/no-ghi-đè-toàn-bộ/no-thiếu-lệnh-chạy/no-gold-plate/no-engine-store/no-ngoài-scope) → Output format (template "Build xong" với lệnh chạy + done-criteria) → Quality gate 7 checkbox → TeamCreate mode đầy đủ (7 bullet: spawn-ack/TaskGet/TaskUpdate/SendMessage/shutdown/re-fix/verify-done-prior).
+  - Điểm đặc trưng builder: Bước 4 smoke-check trước khi báo tester — bắt lỗi syntax/deps sớm; Bước 5 template "cách chạy/kiểm" chi tiết để tester verify khách quan theo done-criteria.
+- **Output**: `.claude/agents/hq-builder.md`.
+- **Self-review checklist (a)–(d)**:
+  - (a) frontmatter hợp lệ: name/description/tools (Read+Write+Edit+Bash — đúng quyền builder)/model đúng ✅
+  - (b) body team agent thực thụ (KHÔNG 5-mục node): mission + Đọc đầu phiên + Workflow chính 5 bước + Anti-patterns + Output format + Quality gate + TeamCreate mode ✅
+  - (c) TeamCreate mode ≥6 bullet: spawn-ack · TaskGet · TaskUpdate in_progress→completed · SendMessage khi xong · shutdown_request · verify-done-from-prior-session + re-fix-path (7 bullet) ✅
+  - (d) self-review ghi vào CHECKPOINT (mục này) ✅
+- **Gate**: (a)–(d) đạt ✅; output location `projects/<name>/` nêu rõ nhiều chỗ ✅; khẳng định build trực tiếp (KHÔNG engine-build) cả intro box + Anti-patterns ✅; Bước 5 + Output format có template lệnh chạy + done-criteria để tester verify ✅
+- **Regression**: validate hello exit 0 ✅ · run hello "x" -Mock done ✅ · selftest 9/9 PASS ✅ · `git diff engine/` = 0 byte ✅. Dọn `.runs/` test ✅
+- **Next**: Session H.6 — `hq-tester.md` teammate (check khách quan + ghi memory).
+- **Notes**: Builder là teammate duy nhất có Write+Edit+Bash — tools đủ để build toàn bộ deliverable mà không cần engine-build. Smoke-check (Bước 4) tách khỏi full test (việc của tester) — đúng ranh giới: builder verify syntax/deps, tester verify done-criteria theo plan.
+
+### 2026-06-02 — Session H.4 — `hq-cto.md` teammate
+
+- **Done**: soạn `.claude/agents/hq-cto.md`.
+  - Frontmatter: `name: hq-cto`, `tools: [Read]` (read-only — CTO chỉ thiết kế, không ghi file), `model: claude-sonnet-4-6`, description 1 dòng phân biệt rõ vs `catalog/tech-lead.md`.
+  - Body: mission 1 câu → Đọc đầu phiên (4 bước có thứ tự) → Workflow chính (4 bước: đọc plan WHAT / thu context kỹ thuật / soạn thiết kế 5 phần A–E / trả lead) → Anti-patterns (9 bullet: no-JSON/no-build-spec/no-catalog-pipeline/no-over-engineer/check-done-criteria...) → Output format (template 5 phần) → Quality gate 6 checkbox → TeamCreate mode đầy đủ.
+  - Thiết kế 5 phần: (A) Stack & công nghệ, (B) Cấu trúc file, (C) Cách tiếp cận từng Step, (D) Điểm cần chú ý, (E) Câu hỏi còn chặn.
+  - Convention catalog: `catalog/` là tham chiếu kỹ thuật tùy chọn (đọc để hiểu domain), KHÔNG phải menu lắp pipeline.
+- **Output**: `.claude/agents/hq-cto.md`.
+- **Self-review checklist (a)–(d)**:
+  - (a) frontmatter hợp lệ: name/description/tools (Read — read-only)/model đúng ✅
+  - (b) body team agent thực thụ (KHÔNG 5-mục node): mission + Đọc đầu phiên + Workflow chính + Anti-patterns + Output format + Quality gate + TeamCreate mode ✅
+  - (c) TeamCreate mode ≥6 bullet: spawn-ack · TaskGet · TaskUpdate in_progress→completed · SendMessage khi xong · shutdown_request · verify-done-from-prior-session + brief-thiếu-guard (7 bullet) ✅
+  - (d) self-review ghi vào CHECKPOINT (mục này) ✅
+- **Gate**: (a)–(d) đạt ✅; thiết kế là văn xuôi cho builder đọc (không JSON ceremony) ✅; nêu rõ builder sẽ Write/Edit trực tiếp theo thiết kế ✅; KHÔNG tham chiếu run.ps1 build/autobuild ✅
+- **Regression**: validate hello exit 0 ✅ · run hello "x" -Mock done ✅ · selftest 9/9 PASS ✅ · `git diff engine/` = 0 byte ✅. Dọn `.runs/` test ✅
+- **Next**: Session H.5 — `hq-builder.md` teammate (Write/Edit/Bash trực tiếp).
+- **Notes**: Catalog được giữ vai trò tham chiếu kỹ thuật (không phải menu lắp workflow) — phù hợp thiết kế Q2. Convention 5-phần A–E đủ để builder không phải đoán cấu trúc hay hướng đi.
 
 ### 2026-06-02 — REFRAME Q2 (giữa H-B, không phải session đẻ thường)
 
