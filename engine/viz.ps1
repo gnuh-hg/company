@@ -32,7 +32,7 @@ function Get-GraphMermaid {
     .SYNOPSIS
         Render graph chuẩn hoá thành mảng dòng Mermaid `graph TD`.
     .DESCRIPTION
-        Router (type='router') → diamond `id{"label"}`; node thường → `id["label"]`.
+        Node ≥2 cạnh ra (điểm rẽ) → diamond `id{"label"}`; approval → hexagon `id{{"⏸ label"}}`; node thường → `id["label"]`.
         Cạnh: `from -->|when| to` (when không rỗng) hoặc `from --> to`. Label escape `"`.
         Node id alphanumeric/_ → an toàn làm Mermaid id. Cùng nguồn Get-Graph nên khớp ASCII.
     .OUTPUTS
@@ -45,11 +45,11 @@ function Get-GraphMermaid {
 
     foreach ($n in $Graph.nodes) {
         $label = (Get-NodeLabel $n).Replace('"', '&quot;')
-        if ($n.type -eq 'router') {
-            $lines.Add(('    {0}{{"{1}"}}' -f $n.id, $label))         # diamond
-        }
-        elseif ($n.type -eq 'approval') {
+        if ($n.type -eq 'approval') {
             $lines.Add(('    {0}{{{{"⏸ {1}"}}}}' -f $n.id, $label))   # hexagon (gate người-duyệt)
+        }
+        elseif (@($Graph.adj[$n.id]).Count -ge 2) {
+            $lines.Add(('    {0}{{"{1}"}}' -f $n.id, $label))           # diamond (điểm rẽ ≥2 cạnh)
         }
         else {
             $lines.Add(('    {0}["{1}"]' -f $n.id, $label))
@@ -86,9 +86,9 @@ function Format-GraphAscii {
     $lines.Add('Nodes:')
     foreach ($n in $Graph.nodes) {
         $tags = @()
-        if ($n.id -eq $Graph.entry)   { $tags += 'entry' }
-        if ($n.type -eq 'router')     { $tags += 'router' }
-        if ($n.type -eq 'approval')   { $tags += 'approval' }
+        if ($n.id -eq $Graph.entry)                   { $tags += 'entry' }
+        if (@($Graph.adj[$n.id]).Count -ge 2)         { $tags += 'branch' }
+        if ($n.type -eq 'approval')                   { $tags += 'approval' }
         $tag = if ($tags.Count -gt 0) { ' (' + ($tags -join ', ') + ')' } else { '' }
         $key = if (-not [string]::IsNullOrWhiteSpace($n.output_key)) { " →$($n.output_key)" } else { '' }
         $mark = if ($n.type -eq 'approval') { '⏸ ' } else { '' }

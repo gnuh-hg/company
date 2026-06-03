@@ -113,6 +113,13 @@ LEAD nhận user_request
     → TeamDelete → báo user (tổng kết: task nào pass, file ở đâu, cách chạy)
 ```
 
+> **⚠️ "1 chat = 1 session" KHÔNG ràng buộc lead.** Quy ước plan-long "mỗi chat chỉ làm 1 session"
+> chỉ áp cho **teammate** (mỗi teammate làm đúng 1 task, STOP tại done-criteria) và cho người tự tay
+> chạy plan trực tiếp. Khi user giao cả một **phase** cho lead mà KHÔNG giới hạn rõ ("chỉ làm session
+> X", "dừng sau Y"), lead **ngầm hiểu = làm hết** các session của phase liên tiếp trong cùng chat —
+> spawn lại chain cho từng session, gate + update CHECKPOINT sau MỖI session. Lead chỉ dừng giữa phase
+> khi: user giới hạn rõ · blocker thật · cần user-gate (vd duyệt diff self-mod **D-S2**).
+
 **Rút gọn chain theo loại task** (không phải task nào cũng cần đủ 7 vai):
 
 | Loại request | Vai cần | Bỏ qua |

@@ -32,3 +32,7 @@ Self-mod J.5 (final) verify. Files đổi: README.md, CLAUDE.md, plan/hq-v2/ROAD
 ## 2026-06-04 01:06 — J2.1-verify-pass
 
 Self-mod J2.1 verify. Files đổi: engine/workflow.ps1, engine/validate.ps1, 6 patterns/*.json, examples/{loopy,branchy,edit-demo,p-brain}/workflow.json. Verdict: PASS. selftest 10/10, validate hello/branchy/loopy/edit-demo/approval-demo exit 0, run branchy (tier:gt1000) + loopy (verdict:pass) -Mock done. grep type:router rỗng trong patterns+fixtures. Test-NodeBranches 9 occurrences. validate.ps1 tolerate type:router đúng thiết kế S1 (REJECT defer S2). .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 02:05 — J2.2-verify-pass
+
+Self-mod J2.2 verify. Files đổi: engine/validate.ps1, engine/viz.ps1, engine/graph.ps1, README.md, CLAUDE.md, plan/hq-v2/ROADMAP.md, plan/hq-v2/phase-j2/CHECKPOINT.md. Verdict: PASS. selftest 10/10, validate hello/branchy/loopy/edit-demo/p-brain/approval-demo exit 0, viz branchy (tier=branch) + loopy (verdict=branch) đúng diamond. Reject proof: fixture scratch type:router → exit=6 "type 'router' đã bỏ (J2)" + fixture đã xoá. grep type:router rỗng trong patterns/examples. Docs: ROADMAP J2 ✅ DONE; CLAUDE.md row validate.ps1/viz.ps1 cập nhật. Vòng 1. Không đụng .claude/agents → không cần re-spawn smoke.

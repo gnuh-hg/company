@@ -103,6 +103,14 @@ Slug: kebab-case từ tên task (vd `gen-narrative-500`, `migrate-supabase-rls`)
 - **STOP NGAY** khi đạt STOP gate của session đó — không tham làm session kế tiếp dù còn quota.
 - **TRƯỚC khi đóng chat**: cập nhật bảng tiến độ + "Đang ở đâu" + thêm 1 entry vào "Per-session log".
 
+> **Ngoại lệ team-lead (ai điều phối HQ-team):** quy ước "1 chat = 1 session" **KHÔNG ràng buộc
+> team-lead**. Khi user giao cả một phase cho lead mà KHÔNG nói rõ "chỉ làm 1 session / dừng sau
+> session X", lead **ngầm hiểu là làm hết** các session của phase liên tiếp trong cùng chat (vẫn
+> update CHECKPOINT + STOP gate sau MỖI session để giữ context sạch). Ràng buộc "1 session" **vẫn
+> nguyên hiệu lực với teammate** (mỗi teammate chỉ làm đúng 1 task được giao, STOP tại done-criteria)
+> và với người tự tay chạy plan-long trực tiếp (không qua team). Lead chỉ dừng giữa phase khi: user
+> giới hạn rõ, gặp blocker thật, hoặc cần user-gate (vd duyệt diff self-mod D-S2).
+
 ---
 
 ## Tiến độ tổng quan

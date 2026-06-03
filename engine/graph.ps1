@@ -181,7 +181,7 @@ if ($MyInvocation.InvocationName -ne '.' -and $MyInvocation.Line -notmatch '^\s*
     Write-Host "✓ graph '$($g.name)': $($g.nodes.Count) node / $($g.edges.Count) edge · entry=$($g.entry) · max_steps=$($g.max_steps)" -ForegroundColor Green
     foreach ($n in $g.nodes) {
         $outs = @($g.adj[$n.id]) | ForEach-Object { if ($_.when) { "$($_.to)[$($_.when)]" } else { $_.to } }
-        $tag  = switch ($n.type) { 'router' { ' (router)' } 'approval' { ' (approval)' } default { '' } }
+        $tag  = if ($n.type -eq 'approval') { ' (approval)' } elseif (@($g.adj[$n.id]).Count -ge 2) { ' (branch)' } else { '' }
         Write-Host ("  {0,-10}{1} → {2}" -f $n.id, $tag, ($outs -join ', '))
     }
 }

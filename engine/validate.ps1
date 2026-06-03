@@ -174,6 +174,18 @@ function Test-Workflow {
             $id = Get-Prop $n 'id'
             $type = Get-Prop $n 'type'
             if ([string]::IsNullOrWhiteSpace($type)) { $type = 'work' }
+            # J2.2: validate type — chấp nhận vắng/null→'work', 'work', 'worker', 'approval'.
+            # 'router' bị REJECT (J2: gộp worker+router, routing = tính chất cạnh, không phải node).
+            # Type lạ khác → lỗi rõ.
+            $nodeLabel = if (-not [string]::IsNullOrWhiteSpace($id)) { "'$id'" } else { "#${idx}" }
+            if ($type -eq 'router') {
+                $errors.Add("node ${nodeLabel}: type 'router' đã bỏ (J2) — node có ≥2 cạnh ra tự là điểm rẽ; xoá field type")
+                $type = 'work'   # treat as worker để tiếp tục validate các luật khác
+            }
+            elseif ($type -notin @('work', 'worker', 'approval')) {
+                $errors.Add("node ${nodeLabel}: type '$type' không hợp lệ (chỉ chấp nhận 'approval' hoặc vắng/worker)")
+                $type = 'work'
+            }
             # approval (Phase D) = gate người-duyệt, KHÔNG gọi model → chỉ cần 'id'
             # (agent/input/output_key không bắt buộc). Node khác cần đủ 4 field.
             $required = if ($type -eq 'approval') { @('id') } else { @('id', 'agent', 'input', 'output_key') }
@@ -246,11 +258,10 @@ function Test-Workflow {
         if ($okFrom -and $okTo) { $adj[$e.from].Add($e.to); $outEdg[$e.from].Add($e) }
     }
 
-    # --- Luật cạnh ra (J2.1: routing = số cạnh ra / outdeg, không phải type) ---
-    # approval GIỮ NGUYÊN. Worker (kể cả node có field type="router" tồn-tại — tolerate J2.1):
+    # --- Luật cạnh ra (J2: routing = số cạnh ra / outdeg, không phải type) ---
+    # approval GIỮ NGUYÊN. Worker (type vắng/'work'/'worker' — type='router' đã bị REJECT ở trên):
     #   outdeg ≥ 2 → điểm rẽ tự động: mọi cạnh ra cần 'when' (engine chọn theo nhãn dòng cuối).
     #   outdeg ≤ 1 → đường thẳng: không bắt buộc 'when'.
-    # type="router" được tolerate (đọc được, coi như worker thường) — REJECT sẽ thêm ở J2.2.
     foreach ($id in $nodeById.Keys) {
         $node = $nodeById[$id]
         $outs = $outEdg[$id]
@@ -270,9 +281,8 @@ function Test-Workflow {
             }
         }
         else {
-            # Worker (bao gồm node có type="router" cũ — tolerate J2.1, không lỗi khi gặp).
-            # outdeg ≥ 2 → điểm rẽ: mọi cạnh ra cần 'when'.
-            # outdeg ≤ 1 → đường thẳng: không kiểm when.
+            # Worker (type vắng/'work'/'worker'): outdeg ≥ 2 → điểm rẽ, mọi cạnh cần 'when'.
+            # outdeg ≤ 1 → đường thẳng, không kiểm when.
             if (@($outs).Count -ge 2) {
                 foreach ($e in $outs) {
                     if ([string]::IsNullOrWhiteSpace($e.when)) {

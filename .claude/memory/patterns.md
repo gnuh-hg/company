@@ -32,3 +32,7 @@ Session J.5 (final close-out): README.md thêm §"Router choices auto-inject" + 
 ## 2026-06-04 01:06 — J2.1-edge-routing-pass
 
 Session J2.1: engine/workflow.ps1 thêm `Test-NodeBranches $Graph $NodeId` (line ~70, outdeg≥2, dot-source-safe) + thay 6 chỗ `$node.type -eq 'router'` → `Test-NodeBranches` (pre-seed _payload, Select-NextNode, resume restore, bơm choices, validate-nhãn, store _payload). validate.ps1 rewrite luật out-edge (outdeg-based, TẠM tolerate type:router). Migrate gỡ `type:"router"` khỏi 6 patterns/*.json + examples/{loopy,branchy,edit-demo,p-brain}/workflow.json. selftest 10/10, validate hello/branchy/loopy/edit-demo/approval-demo exit 0, run branchy -Mock (tier:gt1000) + loopy -Mock (verdict:pass) done, grep type:router rỗng. Test-NodeBranches count=9 (≥7 yêu cầu).
+
+## 2026-06-04 02:05 — J2.2-reject-viz-pass
+
+Session J2.2: engine/validate.ps1 thêm REJECT type:"router" (lỗi: "type 'router' đã bỏ (J2) — node có ≥2 cạnh ra tự là điểm rẽ; xoá field type") + type lạ khác worker/approval → error. engine/viz.ps1 diamond/branch tag theo outdeg≥2 thay type (ASCII `(branch)` thay `(router)`). engine/graph.ps1 tag `branch` theo outdeg. README/CLAUDE.md/ROADMAP/CHECKPOINT cập nhật docs. Reject-proof: fixture scratch type:router → validate exit=6 + lỗi đúng. grep type:router rỗng. selftest 10/10, validate hello/branchy/loopy/edit-demo/p-brain/approval-demo exit 0.

@@ -1,6 +1,6 @@
 # Workflow Engine
 
-> **Engine** điều phối agent chạy full-local trên PowerShell — đọc `workflow.json` dạng **đồ thị điều khiển** (`nodes` + `edges` + `entry`), đi theo đồ thị bằng con trỏ đơn (single-cursor walk), gọi agent qua `claude -p`, ghép context bằng bridge, log + state. Hỗ trợ rẽ nhánh OR (router agent quyết), merge, loop (cycle có chặn `max_steps`).
+> **Engine** điều phối agent chạy full-local trên PowerShell — đọc `workflow.json` dạng **đồ thị điều khiển** (`nodes` + `edges` + `entry`), đi theo đồ thị bằng con trỏ đơn (single-cursor walk), gọi agent qua `claude -p`, ghép context bằng bridge, log + state. Hỗ trợ rẽ nhánh OR (node ≥2 cạnh ra tự rẽ, agent quyết nhãn), merge, loop (cycle có chặn `max_steps`).
 
 `pipeline` tuyến tính (v1) vẫn chạy nguyên: loader tự chuyển thành graph nội bộ → **một executor duy nhất** cho cả hai dạng. Không lưu toạ độ — layout tính lúc render.
 
@@ -114,12 +114,13 @@ Mỗi project là một thư mục chứa `workflow.json` + `agents/*.md`. Dạn
   "entry": "tier",
   "max_steps": 30,
   "nodes": [
-    { "id": "tier",   "agent": "agents/tier-router.md", "type": "router", "input": "{{user_request}}", "output_key": "tier" },
+    { "id": "tier",   "agent": "agents/tier-router.md", "input": "{{user_request}}", "output_key": "tier" },
     { "id": "d10",    "agent": "agents/disc.md",   "input": "{{user_request}}\n10%", "output_key": "discount" },
     { "id": "output", "agent": "agents/output.md",  "input": "{{user_request}}\n{{discount}}", "output_key": "result" }
   ],
   "edges": [
-    { "from": "tier", "to": "d10", "when": "gt5000" },
+    { "from": "tier", "to": "d10",    "when": "gt5000" },
+    { "from": "tier", "to": "output", "when": "else" },
     { "from": "d10",  "to": "output" }
   ],
   "trial": [
@@ -138,25 +139,28 @@ Mỗi project là một thư mục chứa `workflow.json` + `agents/*.md`. Dạn
 | `trial` | root | ⬜ | Việc thật cho `trial`: mảng `{ observe: output_key, expect: { kind: non-empty\|contains\|matches, value } }` |
 | `id` | node | ✅ | ID node, **unique** — dùng đặt tên file debug |
 | `agent` | node | ✅ | Path agent `.md` **tương đối** so với project dir |
-| `type` | node | ⬜ | `"router"` nếu là điểm rẽ; vắng = node việc thường |
+| `type` | node | ⬜ | `"approval"` nếu là gate người-duyệt (không gọi model); vắng / `"work"` = node worker thường. **`"router"` đã bỏ (J2)** — node có ≥2 cạnh ra tự là điểm rẽ |
 | `input` | node | ✅ | Template `{{key}}` — `{{user_request}}` (input gốc), `{{output_key}}` node đã chạy, hoặc `{{mem_*}}` (trí nhớ) |
 | `output_key` | node | ✅ | Key lưu output node này (ghi vào context, **latest-wins** khi loop) |
 | `from`/`to` | edge | ✅ | `id` node nguồn/đích |
-| `when` | edge | ✅ nếu `from` là router | Nhãn khớp output router để chọn cạnh; node thường có đúng **1** cạnh ra (không `when`) |
+| `when` | edge | ✅ nếu node có ≥2 cạnh ra | Nhãn để engine chọn cạnh; node ≥2 cạnh ra (điểm rẽ) cần `when` trên mỗi cạnh; node ≤1 cạnh ra không cần |
 
 - Cạnh là **cạnh điều khiển khai báo tường minh** (không suy từ `{{key}}`). Cho phép **cycle** (loop) qua cạnh quay lại node trước.
 - `{{user_request}}` là input gốc lúc `run`. Loop-feedback resolve rỗng ở vòng đầu — hợp lệ.
 
-### Router — rẽ nhánh do agent quyết
+### Điểm rẽ — node ≥2 cạnh ra, agent quyết
 
 Engine **không có ngôn ngữ biểu thức**. Logic chọn cạnh nằm trong engine, agent chỉ trả nhãn:
 
-- Node `type:"router"`: engine **chuẩn hoá output** → nhãn = dòng không-trắng **cuối**, trim, lowercase.
+- **Node có ≥2 cạnh ra** = điểm rẽ tự động (không cần khai `type`): engine **chuẩn hoá output** → nhãn = dòng không-trắng **cuối**, trim, lowercase.
 - Engine khớp nhãn với `when` của các cạnh ra. Khớp 1 → đi cạnh đó. Không khớp `when` nào → node **fail** (liệt kê `when` hợp lệ) → sửa rồi `resume`.
+- **Node ≤1 cạnh ra** = đường thẳng: không cần in nhãn, engine đi thẳng cạnh duy nhất (hoặc terminal nếu 0 cạnh).
 
-> **`-Mock` trần KHÔNG lái router (A-01).** Mock chỉ echo output xác định, không sinh nhãn router. Project **có router** chạy `-Mock` mà không khai `ENGINE_MOCK_ROUTER` → router không khớp `when` nào → fail. Phải set `$env:ENGINE_MOCK_ROUTER = 'tester:pass'` để steer. Project tuyến tính (như `hello`) không có router → `-Mock` trần chạy thẳng.
+> **`"router"` đã bỏ (J2).** Không khai `type:"router"` — `validate` sẽ báo lỗi. Chỉ cần thêm ≥2 cạnh ra kèm nhãn `when` để biến node thành điểm rẽ.
 
-Ví dụ chạy thử demo router 4 nhánh (`examples/branchy`):
+> **`-Mock` trần KHÔNG lái điểm rẽ (A-01).** Mock chỉ echo output xác định, không sinh nhãn. Project **có điểm rẽ** chạy `-Mock` mà không khai `ENGINE_MOCK_ROUTER` → không khớp `when` nào → fail. Phải set `$env:ENGINE_MOCK_ROUTER = 'tester:pass'` để steer. Project tuyến tính (như `hello`) không có điểm rẽ → `-Mock` trần chạy thẳng.
+
+Ví dụ chạy thử demo điểm rẽ 4 nhánh (`examples/branchy`):
 
 ```powershell
 ./run.ps1 graph branchy                          # xem 4 nhánh + merge
@@ -191,17 +195,17 @@ Order value: 8500 → tier gt5000
 gt5000
 ```
 
-Node successor dùng `{{tier_payload}}` trong `input` để nhận dòng lý do. `validate` cảnh báo (WARN, không error) nếu dùng `{{x_payload}}` mà không có router với `output_key=x`.
+Node successor dùng `{{tier_payload}}` trong `input` để nhận dòng lý do. `validate` cảnh báo (WARN, không error) nếu dùng `{{x_payload}}` mà không có node rẽ nhánh (outdeg≥2) nào với `output_key=x`.
 
 ---
 
 ### Loop — cycle có chặn
 
 - Cạnh `to` trỏ về node đã đi qua = **vòng lặp** (vd `verdict → build` khi `when:"fail"`).
-- **Điều kiện thoát = router** (vd `verdict → ship` khi `when:"pass"`).
-- **`max_steps` bắt buộc**: chạm trần → state `failed`, exit ≠ 0. Là cầu dao an toàn, **không** thay router làm exit chính.
+- **Điều kiện thoát = điểm rẽ** (vd `verdict` có ≥2 cạnh: `pass` → `ship`, `fail` → `build`).
+- **`max_steps` bắt buộc**: chạm trần → state `failed`, exit ≠ 0. Là cầu dao an toàn, **không** thay điểm rẽ làm exit chính.
 
-Ví dụ demo loop build→test→verdict (`examples/loopy`): `verdict` là router, `fail` → quay về `build` (loop), `pass` → `ship` (thoát).
+Ví dụ demo loop build→test→verdict (`examples/loopy`): `verdict` có ≥2 cạnh ra, `fail` → quay về `build` (loop), `pass` → `ship` (thoát).
 
 ```powershell
 # Steer router: fail 2 lần rồi pass — loop 2 vòng rồi thoát:
