@@ -20,26 +20,54 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 11 (H.0–H.10) | 10 (H.0–H.9) + reframe Q2 | ~91% |
+| Sessions hoàn thành | 11 (H.0–H.10) | **11 ✅ (H.0–H.10)** + reframe Q2/Q3 | **100%** |
 | design.md (9 mục) | 1 | 1 ✅ (rewrite Q2) | 100% |
 | Teammate def (`.claude/agents/hq-*`) | 5 | 5 ✅ (researcher, planner, cto, builder, tester — **form prose**) | 100% |
 | Skill project-scope | 2 (`build-verify`+`hq-memory`) | 2 ✅ (`build-verify` + `hq-memory`) | 100% |
 | Nền (flag+memory+playbook) | 3 artifact | 3 ✅ (playbook đầy đủ H.9) | 100% |
-| Done-gate checklist | 11 tick | 10 (design.md + flag/CC-ver + memory-store + 5 teammate + 2 skill + playbook đầy đủ) | 91% |
-| Regression | PASS mỗi session | **PASS (H.9, selftest 9/9)** | — |
+| Done-gate checklist | 11 tick | **11 ✅** (+ chạy thật todo-web PASS H.10) | **100%** |
+| Regression | PASS mỗi session | **PASS (H.10, selftest 9/9, engine diff rỗng)** | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: H-D (Lead + chạy thật). H.9 xong, còn H.10.
-- **Session kế tiếp**: H.10 — Done-gate: chạy thật end-to-end (USER-GATE, đốt token). Lead spawn team → research → plan → cto → builder Write/Edit → tester check khách quan → record memory. Xác nhận với user trước khi chạy.
-- **Blocker**: USER-GATE (H.10 đốt token, cần user xác nhận)
-- **Reference**: `PLAN.md` Phase H-D → Session H.10; `design.md` §9 done-gate checklist.
+- **Phase H ✅ DONE (2026-06-03)** — H.10 lần 2 chạy thật PASS với framing chi nhánh đúng. HQ vận hành trọn vẹn như native team: lead drive TaskList loop, 5 teammate chain researcher→planner→cto→builder→tester hoàn toàn ĐỘNG, giao tiếp prose, builder Write/Edit trực tiếp, tester verify khách quan bằng engine.
+- **Deliverable H.10**: chi nhánh `projects/todo-web/` (workflow.json pipeline v1 5 node story→flow→tasks→fe→report + roster 5 agent lắp từ `catalog/` {pm,ux,tech-lead,frontend-developer,qa-functional}). Tester `CHECK_RESULT: pass` (validate exit 0 + run -Mock done + check output_key 5/5). Lead xác nhận độc lập: validate exit 0, run -Mock path đúng.
+- **Session kế tiếp**: Phase H xong → chuyển ROADMAP hq-v2 sang phase kế (I: token chi nhánh) khi user yêu cầu. Cập nhật bảng tiến độ Phase H trong `ROADMAP.md` → ✅.
+- **Reference**: Per-session log H.10 (lần 2) dưới; `PLAN.md` Outcome checklist (tick hết); `global.md` memory.
 
 ---
 
 ## Per-session log
+
+### 2026-06-03 — Session H.10 (lần 2) — ✅ DONE: chạy thật end-to-end PASS (framing chi nhánh)
+
+- **Setup**: regression baseline trước spawn (validate hello exit 0 · run hello -Mock done · selftest 9/9 PASS); flag + cả 5 agent `tools:` có `Task*`/`SendMessage` xác nhận sẵn (fix lần 1). AskUserQuestion chốt target = **todo-list web app branch** (`todo-web`).
+- **Chạy thật** (user-gate): `TeamCreate(hq-todo-web)` + spawn 5 teammate `run_in_background` (researcher→planner→cto→builder→tester) → đợi ~40s init → drive TaskList loop, gate sau mỗi handoff.
+  - **#1 researcher** → 4 mục (Đã biết/Rủi ro/Câu hỏi/Nguồn), open_questions=không, sketch pipeline 5 node. Gate PASS.
+  - **#2 planner** → Goal đo được + Steps WHAT + Done-criteria mỗi cái có lệnh kiểm (validate/run-Mock/check). Gate PASS.
+  - **#3 cto** → thiết kế 5 phần A–E: pipeline v1 5 node (story/pm→flow/ux→tasks/tech-lead→fe/frontend-developer→report/qa-functional) + cấu trúc file + validate gotchas. Gate PASS.
+  - **#4 builder** → Write TRỰC TIẾP `projects/todo-web/` (workflow.json + 5 agents copy từ catalog/); smoke-check validate exit 0 + run -Mock done. Gate PASS.
+  - **#5 tester** → `CHECK_RESULT: pass` 3/3 (validate exit 0 · run -Mock done path story→…→report · check 5 output_key non-empty); ghi `patterns.md`+`context.md`. Gate PASS.
+- **Lead verify độc lập**: 6 file tồn tại, `validate todo-web` exit 0, `run todo-web -Mock` done path đúng. Done-gate đạt.
+- **Shutdown**: shutdown_request cả 5 → ack → TeamDelete sạch (lần này KHÔNG zombie — vì agent body có đủ team tools từ đầu).
+- **Token note**: chain 5 vai chạy 1 lượt liền mạch không re-fix/re-plan (research→…→verify thẳng) — không có vòng lặp tốn token; HQ-workflow cũ ước ~20–30k token cho cùng việc (per design.md §9). Team-native: best-effort thấp hơn nhờ không re-spawn.
+- **Regression cuối**: validate hello exit 0 ✅ · run hello -Mock exit 0 ✅ · selftest 9/9 PASS ✅ · `git diff engine/` RỖNG ✅. Dọn `.runs/` test ✅.
+- **Bài học**: chain chạy trơn khi (a) brief self-contained paste output bước trước, (b) đợi ~40s init tránh SLOW-PICKUP, (c) agent tools đủ `Task*`/`SendMessage` từ đầu. Không phát sinh issue queue mới.
+- **STOP**: ✅ done-gate H.10 đạt → Phase H DONE.
+
+### 2026-06-03 — Session H.10 (lần 1) — chạy thử → Q3 reframe + fix bug tools
+
+- **Chạy thử H.10 thật** (user gate): lead `TeamCreate(hq-email-landing)` + spawn 5 teammate, drive TaskList loop. Request test (ban đầu): "landing page thu email".
+- **Bug 1 — teammate câm (đã fix)**: cả 5 `hq-*.md` đặt `tools:` allowlist hẹp (vd researcher `[Read,Grep,Glob,WebSearch]`) → KHÔNG có `SendMessage`/`TaskGet`/`TaskUpdate`/`TaskList` → teammate research/plan xong nhưng không report/update được, lead chỉ thấy idle rỗng. Researcher tự chẩn đúng. **Fix**: thêm `TaskGet, TaskUpdate, TaskList, SendMessage` vào `tools:` cả 5 agent. Phải shutdown + respawn (`-2` names; round-1 zombie `tester` chặn `TeamDelete` — framework wart). Ghi `mistakes.md`.
+- **Sau fix**: chain chạy trơn researcher→planner→cto→builder (4 vai pass gate, output prose chuẩn qua SendMessage). Builder ghi `index.html`+`test.js`, `node test.js` PASS.
+- **⚠️ Bug 2 — SAI VAI (Q3 reframe)**: user dừng team, chỉ ra HQ **KHÔNG build app** — vai HQ là **dựng cơ sở CHI NHÁNH** (workflow.json + roster từ catalog + scaffold tại `projects/<branch>/`), chi nhánh mới build app. AskUserQuestion → chốt "chi nhánh cấu hình sẵn (workflow + agents)". **Đảo một phần Q2** (engine + catalog nay là vật-liệu HQ).
+- **Reframe đã làm**: rewrite `hq-builder.md`+`hq-tester.md`+`hq-cto.md` (deliverable=chi nhánh, verify=`run.ps1 validate/run -Mock`, catalog=menu); reframe `hq-planner.md`+`hq-researcher.md`; rewrite skill `build-verify`; sửa `hq-master.md` (§Engine-là-vật-liệu + roster + flow + note tools), `playbook.md` (§3/§7/§8/§10), `CLAUDE.md` (§1/§2 + catalog/projects rows); ghi `global.md` memory; xoá deliverable sai `projects/email-landing`.
+- **Tmux**: thêm `resize-pane -t :.6 -y 18` vào playbook §6 N=5 (planner pane lùn) — user yêu cầu.
+- **STOP**: chưa đạt done-gate H.10 (chạy sai vai). H.10 phải chạy LẠI với framing chi nhánh.
+- **Regression**: validate hello exit 0 ✅ · run hello -Mock done ✅. (selftest chưa chạy lại — agent .md không ảnh hưởng engine; sẽ chạy ở H.10 lần 2.)
+- **Next**: H.10 lần 2 — request "dựng chi nhánh nhỏ build <X>"; gate = tester `run.ps1 validate <branch>` exit 0 + `run -Mock` done.
 
 ### 2026-06-02 — Session H.9 — Playbook đầy đủ + team-issues-queue + hq-master
 

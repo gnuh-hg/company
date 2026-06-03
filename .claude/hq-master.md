@@ -3,30 +3,40 @@
 > Điểm vào "bộ não" lead khi vận hành HQ như **native Claude Code team** (Agent Teams, CD-1
 > hq-v2). Đọc file này + `teams/playbook.md` (chi tiết thao tác) **trước** khi spawn team.
 >
+> **HQ build CHI NHÁNH, KHÔNG build app.** Deliverable HQ-team = **cơ sở của một chi nhánh** chạy được
+> (`workflow.json` + roster `agents/*.md` từ `catalog/` + scaffold tại `projects/<branch>/`). Chi nhánh ấy
+> sau này mới build app/web. Lead/teammate KHÔNG tự dựng landing page / API / app — mà dựng chi nhánh.
+>
 > **3 nguyên tắc bất biến:**
 > 1. Lead **điều phối**, không tự code/build cho task phức tạp — giao cho teammate.
-> 2. Teammate giao tiếp **văn xuôi markdown**, builder ghi file **trực tiếp** (Write/Edit).
+> 2. Teammate giao tiếp **văn xuôi markdown**; builder ghi file chi nhánh **trực tiếp** (Write/Edit `workflow.json` + `agents/*.md`, KHÔNG `autobuild`); tester verify bằng `run.ps1 validate/run -Mock`.
 > 3. Lead **drive một TaskList loop** — giao task → chờ → gate → task kế — KHÔNG chạy 1 lượt rồi quên.
 
 ---
 
-## Engine KHÔNG phải HQ (đọc trước để hết lẫn)
+## Engine LÀ vật-liệu HQ dựng nên (đọc trước để hết lẫn)
 
-`run.ps1` + `engine/*.ps1` + `app/` là **workflow engine cho CHI NHÁNH** — công cụ dựng/chạy
-pipeline DAG. **Nó KHÔNG nằm trong luồng build của HQ-team.** HQ build deliverable bằng cách
-teammate Write/Edit file thẳng vào `projects/<name>/`.
+`run.ps1` + `engine/*.ps1` + `app/` là **workflow engine cho CHI NHÁNH**. Vì **deliverable của HQ
+chính là một chi nhánh** (`workflow.json` + agents), engine vừa là **định dạng output** HQ ghi ra,
+vừa là **công cụ verify**. Builder Write/Edit `workflow.json` + `agents/*.md` thẳng vào
+`projects/<branch>/` (KHÔNG `autobuild` — đã xóa); tester gọi `run.ps1 validate/run -Mock` để gate.
+**Engine là code cố định — KHÔNG sửa `engine/*.ps1`; chỉ GỌI `run.ps1`.**
 
-| Khái niệm | Thuộc về | HQ-team có dùng? |
+| Khái niệm | Thuộc về | HQ-team dùng thế nào? |
 |---|---|---|
-| `TeamCreate` / `Agent` / `SendMessage` / `Task*` | Claude Code Agent Teams | ✅ Đây là cách HQ chạy |
+| `TeamCreate` / `Agent` / `SendMessage` / `Task*` | Claude Code Agent Teams | ✅ Cách HQ điều phối |
 | `.claude/agents/hq-*.md` + `teams/playbook.md` | HQ-team | ✅ Roster + brain |
 | `.claude/memory/` | HQ-team store | ✅ Đọc/ghi qua skill `hq-memory` |
-| `run.ps1 run/validate/graph/build` | Engine (chi nhánh) | ❌ KHÔNG — trừ khi request **chính là** dựng workflow pipeline |
-| `workflow.json` / `build-spec` / `plan-as-data` JSON | Workflow cũ (đã bỏ khỏi HQ) | ❌ Tàn dư — thấy là dừng |
-| `company/memory/` + `<project>/memory/` | Engine branch store (do `memory.ps1` quản) | ❌ HQ KHÔNG đụng |
+| `projects/<branch>/workflow.json` + `agents/*.md` | **Deliverable HQ** | ✅ Builder Write/Edit TRỰC TIẾP |
+| `catalog/*.md` | Menu vai chi nhánh | ✅ CTO chọn, builder phỏng theo dựng roster |
+| `run.ps1 validate/run/check/graph` | Engine | ✅ Builder smoke-check + tester gate (`-Mock`) |
+| `run.ps1 autobuild/autofix` | Workflow cũ (đã xóa) | ❌ Không tồn tại — builder tự viết workflow.json |
+| `build-spec` / `plan-as-data` JSON giữa teammate | Workflow cũ | ❌ Teammate giao tiếp prose; workflow.json là artifact, KHÁC |
+| `company/memory/` + `<branch>/memory/` | Engine branch store (`memory.ps1` quản) | ❌ HQ KHÔNG đụng tay |
 
-Nếu một teammate bắt đầu xuất JSON plan-as-data hoặc gọi `run.ps1 autobuild` → đó là lậm
-workflow cũ → lead chỉnh ngay (ghi issue `FORM`/`BUILD` vào queue).
+Teammate build **app trực tiếp** (index.html app, src/ app...) thay vì dựng chi nhánh → sai vai →
+lead chỉnh ngay (ghi issue `SCOPE`/`FORM`). Teammate gọi `autobuild` hoặc trao đổi plan-as-data JSON
+giữa các vai → tàn dư cũ → chỉnh (`FORM`).
 
 ---
 
@@ -34,11 +44,14 @@ workflow cũ → lead chỉnh ngay (ghi issue `FORM`/`BUILD` vào queue).
 
 | Teammate | Vai | Tools | Output |
 |---|---|---|---|
-| `hq-researcher` | gom context + memory → tóm tắt + câu-hỏi-còn-chặn | Read, Grep, Glob, WebSearch | prose 4 mục |
-| `hq-planner` | WHAT — kế hoạch markdown (Goal/Steps/Done-criteria) | Read | prose, KHÔNG JSON |
-| `hq-cto` | HOW — thiết kế kỹ thuật văn xuôi (stack/cấu trúc file/cách tiếp cận) | Read | prose 5 mục A–E |
-| `hq-builder` | ghi file deliverable TRỰC TIẾP vào `projects/<name>/` | Read, Write, Edit, Bash | file + cách chạy |
-| `hq-tester` | chạy check khách quan + ghi memory | Read, Bash | `CHECK_RESULT: pass\|fail` |
+| `hq-researcher` | gom context (catalog/engine/chi nhánh mẫu) + memory → tóm tắt + câu-hỏi-còn-chặn | Read, Grep, Glob, WebSearch, Task*, SendMessage | prose 4 mục |
+| `hq-planner` | WHAT — kế hoạch chi nhánh (Goal/Steps/Done-criteria = validate+run-Mock) | Read, Task*, SendMessage | prose, KHÔNG JSON |
+| `hq-cto` | HOW — thiết kế chi nhánh (pipeline node/edge/when + roster từ catalog/) | Read, Task*, SendMessage | prose 5 mục A–E |
+| `hq-builder` | Write/Edit `workflow.json` + `agents/*.md` chi nhánh vào `projects/<branch>/` | Read, Write, Edit, Bash, Task*, SendMessage | file + lệnh verify |
+| `hq-tester` | verify chi nhánh bằng `run.ps1 validate/run -Mock` + ghi memory | Read, Bash, Task*, SendMessage | `CHECK_RESULT: pass\|fail` |
+
+> **Lưu ý tool (bài học H.10):** mỗi agent body PHẢI có `TaskGet/TaskUpdate/TaskList/SendMessage` trong
+> `tools:` — nếu chỉ liệt tool domain (Read/Bash...) thì teammate KHÔNG report/TaskUpdate được → câm.
 
 Mỗi agent body đã chứa section **"Trong TeamCreate mode"** (ack + `TaskGet` + `TaskUpdate
 in_progress` **cùng turn**; xong = `TaskUpdate completed` rồi `SendMessage` paste-full-output).
@@ -70,9 +83,9 @@ LEAD nhận user_request
         ├─ HANDOFF CHAIN (mỗi mũi tên = 1 gate của lead):
         │    researcher  → [gate: open_questions còn chặn? → hỏi user]
         │    → planner   → [gate: Goal/Done-criteria đo được?]
-        │    → cto       → [gate: thiết kế đủ để builder không phải đoán?]
-        │    → builder   → [gate: file đã ghi vào projects/<name>/?]
-        │    → tester    → CHECK_RESULT: pass|fail
+        │    → cto       → [gate: pipeline+roster đủ để builder không phải đoán?]
+        │    → builder   → [gate: workflow.json+agents ghi vào projects/<branch>/, validate exit 0?]
+        │    → tester    → CHECK_RESULT: pass|fail (run.ps1 validate + run -Mock)
         │
         │    Mỗi handoff: TaskUpdate(owner=teammate) + SendMessage wake → CHỜ report → gate
         │
@@ -139,7 +152,7 @@ Brief template + per-role brief + layout terminal + xử lý teammate im → **`
 |---|---|
 | Playbook thao tác (spawn template, layout, failure-mode) | `.claude/teams/playbook.md` |
 | Roster agent body | `.claude/agents/hq-*.md` |
-| Issue queue (hành vi teammate) | `.claude/team-issues-queue.md` |
+| Issue queue (hành vi teammate) | `company/issues/team-issues-queue.md` |
 | Skill build + verify | `.claude/skills/build-verify/SKILL.md` |
 | Skill memory | `.claude/skills/hq-memory/SKILL.md` |
 | Memory store HQ-team | `.claude/memory/` |

@@ -1,189 +1,136 @@
 ---
 name: build-verify
-description: "Quy ước build deliverable TRỰC TIẾP (Write/Edit vào projects/<name>/) + verify khách quan (chạy test/build/lint của deliverable, đọc exit-code, in CHECK_RESULT). Dùng chung cho builder và tester trong HQ-team."
+description: "Quy ước dựng CƠ SỞ CHI NHÁNH TRỰC TIẾP (Write/Edit workflow.json + agents từ catalog/ + scaffold vào projects/<branch>/) + verify khách quan bằng engine (run.ps1 validate exit 0 + run -Mock done + check). Dùng chung cho builder và tester HQ-team."
 ---
 
 # Build-Verify — HQ team convention
 
-> Quy ước chung cho **builder** (ghi file trực tiếp) và **tester** (verify khách quan). Không dùng engine-build trong luồng HQ.
+> Quy ước chung cho **builder** (dựng chi nhánh) và **tester** (verify bằng engine).
+>
+> ⚠️ **HQ build CHI NHÁNH, KHÔNG build app.** Deliverable HQ = cơ sở một chi nhánh chạy được (`workflow.json` + `agents/*.md` + scaffold); chi nhánh ấy sau này mới build app/web. Builder tự viết `workflow.json` + agents bằng Write/Edit (KHÔNG `run.ps1 autobuild` — đã xóa); engine `run.ps1 validate/run/check` dùng để **kiểm chi nhánh vừa dựng**.
 
 ---
 
-## 1. Nơi ghi + cấu trúc deliverable
+## 1. Nơi ghi + cấu trúc chi nhánh
 
 ### Output location
-
 ```
-projects/<name>/        ← mọi file deliverable đặt ở đây
+projects/<branch>/      ← mọi file chi nhánh đặt ở đây
 ```
+- `projects/` gitignored — regen-được, không commit.
+- `<branch>` = tên ngắn kebab-case (vd `landing-branch`, `crud-api-branch`). Lead xác nhận tên; builder KHÔNG tự đặt nếu chưa có.
 
-- `projects/` gitignored (`company/.gitignore`) — regen-được, không commit.
-- `<name>` = tên project ngắn, kebab-case (vd `landing-email`, `auth-api`, `mobile-dashboard`).
-- Lead xác nhận tên project khi assign task cho builder; builder KHÔNG tự đặt tên nếu chưa có.
-
-### Cấu trúc điển hình theo loại deliverable
-
-| Loại | Cấu trúc tối thiểu |
-|---|---|
-| Web frontend | `index.html` + `css/` + `js/` (hoặc framework scaffold) |
-| Node/TS backend | `package.json` + `src/` + `tsconfig.json` |
-| Python backend | `main.py` hoặc `app/` + `requirements.txt` |
-| Full-stack | `frontend/` + `backend/` + `README.md` (cách chạy) |
-| Script / CLI | entrypoint + `README.md` (cách chạy + args) |
-
-Cấu trúc thực tế theo thiết kế CTO — đây chỉ là tham chiếu khởi điểm.
-
-### README trong deliverable (bắt buộc nếu cần lệnh để chạy)
-
-Mỗi deliverable có `README.md` hoặc comment inline nêu rõ:
-- Cách cài deps (`npm install`, `pip install -r requirements.txt`, v.v.)
-- Cách chạy app / start server
-- Cách chạy test
-
-Tester cần thông tin này để verify khách quan mà không phải đoán.
+### Cấu trúc một chi nhánh
+```
+projects/<branch>/
+├── workflow.json       # pipeline engine: nodes/edges/entry/max_steps (hoặc pipeline v1)
+├── agents/
+│   ├── <role>.md       # roster: 1 file/node, phỏng theo catalog/<role>.md
+│   └── ...
+└── <scaffold>          # README cách chạy, file cấu hình chi nhánh nếu cần
+```
+- `workflow.json`: chỉ ngữ nghĩa — KHÔNG toạ độ. Graph: mỗi node có `id`/`agent`/`input`/`output_key`; `edges` tường minh (router ≥2 cạnh phải có `when`); `entry`; `max_steps`. Hoặc pipeline v1 (mảng tuần tự).
+- `agents/<role>.md`: frontmatter (`name`, model nếu cần) + system prompt. Lấy gốc từ `catalog/<role>.md` rồi chỉnh cho domain chi nhánh.
+- Tham khảo mẫu: `examples/web-demo/` (chi nhánh lắp tay từ catalog), `examples/loopy/` (router + loop + max_steps).
 
 ---
 
-## 2. Builder — build deliverable trực tiếp
+## 2. Builder — dựng chi nhánh trực tiếp
 
 ### Nguyên tắc
-
-- **Write/Edit file trực tiếp** vào `projects/<name>/`. Không trung gian qua engine.
-- **Bash** để cài deps, build, chạy smoke-check nhanh (không phải full test).
-- Không đụng `engine/*.ps1`. Không `run.ps1 autobuild/autofix`. Không tạo `workflow.json` HQ.
+- **Write/Edit trực tiếp** `workflow.json` + `agents/*.md` + scaffold vào `projects/<branch>/`.
+- **KHÔNG `run.ps1 autobuild/autofix`** (đã xóa). Tự viết workflow.json bằng tay.
+- **KHÔNG đụng `engine/*.ps1`** — chỉ GỌI `run.ps1 validate/run` để smoke-check.
+- **KHÔNG build app** (index.html app, src/ app...) — đó là việc chi nhánh làm sau.
 
 ### Workflow builder (5 bước)
-
-1. **Đọc brief**: TaskGet → đọc thiết kế CTO (cấu trúc file, công nghệ, cách tiếp cận) + plan planner (done-criteria).
-2. **Chuẩn bị workspace**: `mkdir -p projects/<name>/`, kiểm tra deps có sẵn chưa.
-3. **Write/Edit files**: theo cấu trúc thiết kế CTO. Ưu tiên Edit khi file đã có; Write khi tạo mới.
-4. **Smoke-check**: chạy lệnh nhanh xác nhận không lỗi syntax/deps trước khi báo tester.
+1. **Đọc brief**: TaskGet → thiết kế CTO (pipeline + roster + cấu trúc file) + plan (done-criteria) + tên chi nhánh.
+2. **Chuẩn bị**: kiểm `projects/<branch>/` đã có chưa (Write tự tạo path).
+3. **Write/Edit**: agents `projects/<branch>/agents/<role>.md` (từ catalog) → `projects/<branch>/workflow.json` (node trỏ agent) → scaffold.
+4. **Smoke-check bằng engine** (từ `company/engine/`):
    ```bash
-   cd projects/<name>
-   npm install && npm run build 2>&1 | tail -20   # Node
-   python -m py_compile main.py                    # Python
+   cd /home/gnuh/Documents/company/engine
+   pwsh ./run.ps1 validate <branch>            # exit 0 = workflow hợp lệ
+   pwsh ./run.ps1 run <branch> "smoke" -Mock   # done, đi tới terminal
    ```
-5. **Báo tester**: SendMessage kèm:
-   - Deliverable ở: `projects/<name>/`
-   - Cách chạy/kiểm: `<lệnh cụ thể>`
-   - Done-criteria cần verify: `<copy từ plan planner>`
+   Lỗi → sửa ngay, chưa báo tester cho tới khi cả hai pass.
+5. **Báo tester**: SendMessage kèm cấu trúc file + lệnh engine tester chạy + done-criteria.
 
 ### Anti-patterns builder
-
-- Không tự suy thiết kế khi CTO chưa cho — hỏi lead.
-- Không ghi đè toàn bộ nếu chỉ cần sửa một phần — dùng Edit.
-- Không báo tester khi smoke-check còn lỗi.
-- Không để thiếu cách chạy trong báo cáo cho tester.
-- Không ghi file ngoài `projects/<name>/` trừ khi lead yêu cầu tường minh.
+- Build app trực tiếp thay vì dựng chi nhánh (workflow + agents).
+- Gọi `run.ps1 autobuild` (không còn tồn tại) thay vì Write/Edit workflow.json.
+- Lưu toạ độ trong workflow.json; router thiếu `when`; quên `entry`/`max_steps`.
+- Báo tester khi `validate`/`run -Mock` chưa pass.
+- Ghi ngoài `projects/<branch>/` (đụng engine/catalog/examples).
 
 ---
 
-## 3. Tester — verify khách quan
+## 3. Tester — verify chi nhánh bằng engine
 
 ### Nguyên tắc
-
-- **Chạy check của chính deliverable** — test suite, build, lint, hoặc quan sát hành vi nếu không có test.
-- **Exit-code / output lệnh là nguồn sự thật** — không phán "trông ổn".
-- In **`CHECK_RESULT:` bắt buộc** — format máy-đọc-được cho lead đọc verdict.
+- **Verify chi nhánh bằng engine** — `run.ps1 validate/run/check`, KHÔNG verify như app (không npm test/pytest trên chi nhánh).
+- **Exit-code / output engine là nguồn sự thật** — không "trông ổn".
+- **`-Mock`** — verify offline, không đốt token. Real-run chỉ khi lead chỉ định.
+- In **`CHECK_RESULT:` bắt buộc**.
 
 ### Workflow tester (5 bước)
-
-1. **Nhận brief từ builder**: vị trí deliverable + cách chạy + done-criteria.
-2. **Chạy check deliverable**:
-
+1. **Nhận brief**: tên chi nhánh + done-criteria + lệnh engine từ builder.
+2. **Chạy engine verify** (từ `company/engine/`):
    ```bash
-   # Node / frontend
-   cd projects/<name>
-   npm install
-   npm test        # exit 0 = pass; khác 0 = fail
-   npm run build   # kiểm build prod nếu done-criteria yêu cầu
-
-   # Python
-   cd projects/<name>
-   pip install -r requirements.txt -q
-   pytest          # hoặc python -m pytest
-
-   # Go
-   cd projects/<name>
-   go test ./...
-
-   # Lint / type-check
-   npm run lint
-   npx tsc --noEmit
+   cd /home/gnuh/Documents/company/engine
+   pwsh ./run.ps1 validate <branch>; echo "exit=$?"            # exit 0
+   pwsh ./run.ps1 run <branch> "verify" -Mock; echo "exit=$?"  # done
+   pwsh ./run.ps1 check <branch>; echo "exit=$?"               # output_keys non-empty (nếu cần)
    ```
+3. **Map done-criteria → bằng chứng**:
 
-3. **Map done-criteria → bằng chứng**: mỗi done-criteria từ plan planner → lệnh đã chạy → output → pass/fail.
-
-   | Done-criteria | Lệnh chạy | Kết quả | Pass/Fail |
+   | Done-criteria | Lệnh engine | Kết quả | Pass/Fail |
    |---|---|---|---|
-   | Build thành công | `npm run build` | exit 0, thư mục `dist/` tạo ra | ✅ Pass |
-   | Tests ≥ 90% pass | `npm test` | 18/20 pass | ❌ Fail |
-   | Không lỗi lint | `npm run lint` | 0 warnings | ✅ Pass |
+   | workflow hợp lệ | `run.ps1 validate <branch>` | exit 0 | ✅ |
+   | chạy tới terminal | `run.ps1 run <branch> "x" -Mock` | done, path a→…→ship | ✅ |
+   | output_keys đầy đủ | `run.ps1 check <branch>` | exit 0 | ✅ |
 
 4. **In CHECK_RESULT**:
-
    ```
    CHECK_RESULT: pass
    ```
-   hoặc:
-   ```
-   CHECK_RESULT: fail (npm test: 2 failures — src/auth.test.js:45 TypeError: token undefined)
-   ```
-
-5. **Báo lead**: SendMessage kèm bảng done-criteria + CHECK_RESULT + lý do cụ thể nếu fail.
-
-### Khi deliverable không có test tự động
-
-Tester định nghĩa kiểm-tra quan-sát-được từ done-criteria (vd "mở `index.html` → nhập email hợp lệ → thấy button submit active"). Chạy/quan sát thực tế, ghi rõ "đã kiểm gì + thấy gì". Vẫn cụ thể — không "nhìn có vẻ OK".
+   hoặc `CHECK_RESULT: fail (validate: router node 'x' thiếu when / run -Mock: node 'y' treo)`.
+5. **Báo lead**: bảng done-criteria + CHECK_RESULT + lỗi cụ thể nếu fail.
 
 ### Anti-patterns tester
-
-- Không phán "code trông sạch" mà không chạy lệnh.
-- Không bỏ qua done-criteria nào — map toàn bộ, không cherry-pick.
-- Không dùng `run.ps1 check/trial` — engine không trong luồng HQ.
-- Không sửa file deliverable — tester read+run only.
-- CHECK_RESULT phải in dù pass — lead cần confirmation rõ ràng.
+- Verify chi nhánh như app (npm test/pytest) thay vì `run.ps1 validate/run/check`.
+- Phán cảm tính không chạy engine.
+- Quên `-Mock` (đốt token) / sửa `engine/*.ps1`.
+- Bỏ qua done-criteria; không in CHECK_RESULT.
+- Sửa file chi nhánh (tester read+run only).
 
 ---
 
-## 4. Ranh giới — điều HQ-team KHÔNG làm
+## 4. Ranh giới — engine VÀ HQ
 
-| Không làm | Lý do |
+| Điều | Vị thế dưới framing chi nhánh |
 |---|---|
-| `run.ps1 autobuild/autofix/build` | Engine-build là form workflow cũ; HQ build trực tiếp |
-| Tạo `workflow.json` cho deliverable HQ | Deliverable là app/code, không phải pipeline engine |
-| Đụng `engine/*.ps1` | Engine là tool chi nhánh đứng riêng; HQ không bắt buộc đi qua |
-| Builder chạy test đầy đủ | Đó là việc của tester — tránh double-work |
-| Tester sửa file deliverable | Tester chỉ đọc + chạy check; sửa là việc của builder |
-| Ghi vào `company/memory/` | Đó là engine branch store — HQ-team ghi `.claude/memory/` (xem skill `hq-memory`) |
-
-### Ngoại lệ: khi request CỤ THỂ là "dựng workflow pipeline"
-
-Nếu (và chỉ nếu) user yêu cầu rõ "tạo/sửa workflow engine pipeline", lead/builder có thể gọi:
-
-```bash
-cd /path/to/company/engine
-./run.ps1 validate <project>
-./run.ps1 run <project> "<input>" -Mock
-./run.ps1 graph <project>
-```
-
-Đây là **ngoại lệ** — không phải đường build mặc định.
+| `run.ps1 validate/run/check/graph` | **Công cụ verify CHÍNH** của HQ (chi nhánh = workflow engine) — builder smoke-check, tester gate |
+| `workflow.json` trong `projects/<branch>/` | **LÀ deliverable** (cơ sở chi nhánh) — builder Write/Edit trực tiếp |
+| `catalog/*.md` | **Menu vai** để lắp roster chi nhánh — CTO chọn, builder phỏng theo |
+| `run.ps1 autobuild/autofix` | KHÔNG tồn tại (đã xóa) — builder tự viết workflow.json bằng tay |
+| Sửa `engine/*.ps1` | KHÔNG — engine là code cố định; chỉ GỌI `run.ps1` |
+| Build app/web (`projects/<branch>/` chứa app code) | KHÔNG — đó là việc CHI NHÁNH làm sau, không phải HQ |
+| `company/memory/` + `<branch>/memory/` | Engine branch store (engine tự quản) — HQ-team ghi `.claude/memory/` (skill `hq-memory`) |
 
 ---
 
 ## 5. Quick reference
-
 ```
-BUILDER:
-  → Write/Edit  : projects/<name>/...
-  → Bash (deps) : npm install / pip install / go mod download
-  → Bash (smoke): npm run build / python -m py_compile
-  → Báo tester  : location + cách chạy + done-criteria
+BUILDER (dựng chi nhánh):
+  → Write/Edit : projects/<branch>/agents/<role>.md  (từ catalog/)
+  → Write/Edit : projects/<branch>/workflow.json     (node trỏ agent; router có when)
+  → smoke (cd company/engine): run.ps1 validate <branch> + run <branch> "x" -Mock
+  → Báo tester : cấu trúc + lệnh engine + done-criteria
 
-TESTER:
-  → Bash (check): npm test / pytest / go test ./... / npm run lint
-  → Map criteria: bảng done-criteria → lệnh → exit-code → pass/fail
+TESTER (verify chi nhánh):
+  → engine (cd company/engine): run.ps1 validate / run -Mock / check
+  → Map criteria: done-criteria → lệnh engine → exit-code → pass/fail
   → In verdict  : CHECK_RESULT: pass|fail (lý do nếu fail)
   → Báo lead    : bảng + CHECK_RESULT
 ```

@@ -8,23 +8,31 @@
 
 `company/` chứa **hai hệ độc lập**. Lẫn hai cái này là nguồn lỗi phổ biến nhất:
 
-### 1. HQ-team — native Claude Code team (cách HQ build deliverable)
+### 1. HQ-team — native Claude Code team (HQ dựng CHI NHÁNH)
+
+> **⚠️ Q3 reframe (2026-06-03, user chốt):** HQ **KHÔNG build app/web**. HQ build **cơ sở của một
+> CHI NHÁNH** = `workflow.json` + roster `agents/*.md` (từ `catalog/`) + scaffold tại
+> `projects/<branch>/`. Chi nhánh ấy **sau này mới build app**. (Đảo một phần Q2: engine + catalog
+> nay LÀ vật-liệu HQ dựng nên, không còn "ngoài luồng HQ".)
 
 HQ vận hành như **team-of-agents native** (Agent Teams: `TeamCreate` / `Agent` / `SendMessage` /
-`Task*`). Lead điều phối 5 teammate (`researcher → planner → cto → builder → tester`), builder
-**Write/Edit file trực tiếp** vào `projects/<name>/`. **KHÔNG** dùng engine để build.
+`Task*`). Lead điều phối 5 teammate (`researcher → planner → cto → builder → tester`): builder
+**Write/Edit `workflow.json` + `agents/*.md` trực tiếp** vào `projects/<branch>/` (KHÔNG `autobuild`);
+tester verify bằng `run.ps1 validate <branch>` exit 0 + `run -Mock` done.
 
 > **Đọc trước khi spawn team:** [`.claude/hq-master.md`](.claude/hq-master.md) (flow + roster +
-> ranh giới engine) **+** [`.claude/teams/playbook.md`](.claude/teams/playbook.md) (spawn template,
+> engine-là-vật-liệu) **+** [`.claude/teams/playbook.md`](.claude/teams/playbook.md) (spawn template,
 > TaskList loop, chia vùng tmux, failure-mode). Roster: `.claude/agents/hq-*.md`.
 
 Cách chạy: lead phân loại request → `TeamCreate` → spawn teammate (`Agent(... subagent_type="hq-<role>")`)
 → drive **TaskList loop** (giao → chờ → gate → task kế) → tester `CHECK_RESULT: pass|fail` → shutdown.
 
-### 2. Workflow Engine — công cụ cho CHI NHÁNH (KHÔNG phải HQ)
+### 2. Workflow Engine — vật liệu + công cụ verify của HQ (và tool chi nhánh)
 
-`run.ps1` + `engine/*.ps1` + `app/` là engine dựng/chạy pipeline DAG, **chỉ dùng cho workflow
-chi-nhánh** — KHÔNG nằm trong luồng build mặc định của HQ. Xem [`README.md`](README.md).
+`run.ps1` + `engine/*.ps1` + `app/` là engine dựng/chạy pipeline DAG. Vì **deliverable HQ chính là
+một chi nhánh** (workflow.json + agents), engine vừa là **định dạng output** builder ghi ra, vừa là
+**đường verify** của tester (`validate`/`run -Mock`/`check`). Engine là code cố định — chỉ GỌI
+`run.ps1`, KHÔNG sửa `engine/*.ps1`. Xem [`README.md`](README.md).
 
 Cách dùng nhanh (từ `company/engine/`):
 
@@ -35,8 +43,9 @@ Cách dùng nhanh (từ `company/engine/`):
 ./run.ps1 status hello                # tiến độ run gần nhất
 ```
 
-> ⚠️ `workflow.json` / `build-spec` / `plan-as-data` JSON / `run.ps1 autobuild` là **workflow HQ
-> cũ — đã bỏ**. HQ-team KHÔNG xuất JSON, KHÔNG engine-build. Thấy teammate lậm form đó → chỉnh ngay.
+> ⚠️ `run.ps1 autobuild/autofix` + `build-spec` + trao đổi `plan-as-data` JSON **giữa teammate** là
+> **workflow HQ cũ — đã bỏ**. NHƯNG `workflow.json` trong `projects/<branch>/` LÀ deliverable hợp lệ
+> (builder Write/Edit tay). Teammate giao tiếp prose; builder build chi nhánh, KHÔNG build app trực tiếp.
 
 ---
 
@@ -64,12 +73,13 @@ Cách dùng nhanh (từ `company/engine/`):
 | ~~`engine/spec.ps1`~~ | **ĐÃ XÓA — hq-v2 Phase 0 Session 0.1 (2026-06-02)**. `Test-PlanSchema`/`Test-BuildSpec`/`Invoke-BuildSpec` là data-contract HQ-CTO (build-spec JSON → `workflow.json`); HQ Q2 không còn dùng (builder build TRỰC TIẾP). |
 | `engine/memory.ps1` | Memory 2 tầng (Phase M): `Get-Memory $ProjectDir [-Cap N]` (read-path: đọc HQ-global `company/memory/` + per-branch `<project>/memory/context.md` → hashtable 3 key `mem_mistakes`/`mem_patterns`/`mem_context`, split theo delimiter entry + cap N mới nhất, fence-skip; bridge nạp `{{mem_*}}` qua `Initialize-Context`) + `Write-MemoryEntry $ProjectDir $Type $Content` (write-path: node `record` `memory_write` append 1 block date-stamped vào đúng tầng theo loại). `global.md` gộp vào `mem_patterns` |
 | `company/memory/` | Store HQ-global (Phase M-A): `mistakes.md`/`patterns.md`/`global.md` (format entry đo được, delimiter `## <YYYY-MM-DD HH:MM> — <slug>`) + `README.md` (bảng loại→tầng→key bridge→đọc/ghi, cap N=10, reserved-key `mem_*`, convention per-branch `context.md`). Chỉ HQ ghi; per-branch `context.md` sinh lười khi node `record` ghi `context` |
+| `company/issues/` | **Nhà chung mọi loại issue** (gom 2026-06-03): `README.md` (index loại→file→nguồn→commit→format) + `team-issues-queue.md` (hành vi teammate HQ-team, hand-curated committed — chuyển từ `.claude/`) + `route-issues.ndjson` (Phase J: engine ghi khi router in nhãn sai tập cạnh; deterministic non-AI; gitignored `issues/*.ndjson`). Tách khỏi `.claude/` vì issue đến từ nhiều lớp + sẽ thêm loại mới |
 | `engine/lib/{json,log,claude}.ps1` | Tiện ích nền. `claude` có `-Mock` + `ENGINE_MOCK_ROUTER` (đa-spec `;`-separated: `"a:l1,l2;b:l3"` — mỗi router steer độc lập) |
 | `patterns/*.json` + `patterns/README.md` | 6 fragment robustness (Phase 0): `research-gather`, `clarify-gate`, `plan-decompose`, `re-plan-loop`, `do-verify-loop`, `escalate-gate` (node+edge+`when`, id placeholder `__P__x`) + convention |
 | ~~`hq/*` (workflow.json/mmd/agents/build-spec.md/skills.md)~~ | **ĐÃ XÓA — hq-v2 Phase H Q2 reframe (2026-06-02)**. Workflow HQ cũ (DAG 11 node + 5 agent headless + build-spec + skills doc) gỡ vì là nguồn khiến teammate native lậm form workflow. HQ nay = native team (`.claude/agents/hq-*.md` + `.claude/hq-master.md`), build deliverable TRỰC TIẾP. Lịch sử: `plan/hq-build/phase-3,4`; reframe: `plan/hq-v2/phase-h/design.md` §Revise |
 | ~~`examples/hq-graph-tests.ps1` + `examples/hq-tests.ps1` + `examples/hq-*/`~~ | **ĐÃ XÓA cùng `hq/`** (test + fixture cho workflow HQ cũ). `engine/test-runner.ps1` de-wire 2 script → selftest 12→10; `e2e-harness-tests` giữ (repoint `hq/`→`examples/loopy`) |
-| `catalog/*.md` + `catalog/README.md` | **17 vai chi nhánh hand-authored** (Phase 1): đầu-não (researcher, planner), Product (pm, ba), Design (ux, ui), Engineering (tech-lead, db-architect, api-developer, auth-engineer, frontend-developer, devops, mobile-ios/android/flutter), QA (qa-functional, qa-regression). Mỗi file = system prompt + ranh giới theo template 5 mục (Một việc/Input/Trả ra/Không làm/Handoff). `README.md` = template + ma trận ranh giới chống đè + index. **Sau Q2**: là tham chiếu TÙY CHỌN cho `hq-cto` (gợi ý chuyên môn), KHÔNG còn "menu lắp pipeline" (HQ không lắp workflow.json nữa) |
-| `projects/` | **App thật** (chi nhánh HQ build ra qua E2E real Phase 5). Hiện có `landing-email` (build happy-path) + `broken-web` (fix-loop). Gitignored (`projects/*/`) — regen-được, không commit. |
+| `catalog/*.md` + `catalog/README.md` | **17 vai chi nhánh hand-authored** (Phase 1): đầu-não (researcher, planner), Product (pm, ba), Design (ux, ui), Engineering (tech-lead, db-architect, api-developer, auth-engineer, frontend-developer, devops, mobile-ios/android/flutter), QA (qa-functional, qa-regression). Mỗi file = system prompt + ranh giới theo template 5 mục (Một việc/Input/Trả ra/Không làm/Handoff). `README.md` = template + ma trận ranh giới chống đè + index. **Q3 (2026-06-03)**: là **MENU vai** cho `hq-cto` chọn + `hq-builder` phỏng theo dựng roster `projects/<branch>/agents/*.md` (HQ build chi nhánh = workflow.json + agents). Đảo lại note Q2 "không phải menu". |
+| `projects/` | **Chi nhánh HQ dựng ra** (mỗi `<branch>/` = `workflow.json` + `agents/*.md` + scaffold; chi nhánh ấy sau build app). Gitignored (`projects/*/`) — regen-được, không commit. |
 | ~~`examples/broken-web/`~~ | **ĐÃ XÓA — hq-v2 Phase 0 Session 0.1 (2026-06-02)**. Chỉ phục vụ `Invoke-E2EFix` seed (đã xoá cùng `e2e.ps1`). |
 | `sandbox/` | Khu cô lập tầng trial (`engine/sandbox.ps1` copy project vào `<runid>/` chạy real → teardown). Gitignored (`company/.gitignore`); rỗng khi không có trial đang chạy |
 | `examples/p-*/` | Demo wrapper mỗi pattern (`stamp.ps1` + agent stub) + `examples/p-brain/` = integration nối pattern theo brain-model §D (vòng đời research→plan→do/verify→re-plan→escalate) |
@@ -99,6 +109,7 @@ Cách dùng nhanh (từ `company/engine/`):
 | `plan/hq-improve/phase-g/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase G (App III — in-app edit, tuỳ chọn #cuối): 3 sub-phase / 6 session — **✅ DONE (2026-06-01)**. Sửa cấu trúc graph NGAY trong app (lấp gap: CLI `edit.ps1` chỉ pipeline-v1, từ chối graph-format A-18 → `hq`/`loopy`/`branchy`/`approval-demo` không có editor): G.1 engine `save-graph` additive (`engine/save.ps1` write→validate→commit-or-restore, pattern backup-restore từ `edit.ps1` nút 'v' + strip toạ độ + `Write-SaveResult` JSON stdout + fixture `examples/edit-demo/`) · G.2 server `POST /api/workflow` (shell save-graph, reject-on-invalid 422+errors[]) · G.3 edit-mode cạnh (connect/delete+when-label)+nút Save · G.4 add/del node+form field+entry/max_steps · G.5 coordinate-free guarantee (strip `x/y` 2 lớp)+layout node mới vào `.layout.json` · G.6 polish+docs+gate+đóng đợt hq-improve. Chốt (user 2026-06-01): G-D1 full structural · G-D2 engine command additive · G-D3 reject-on-invalid (workflow.json luôn hợp lệ). **Engine chỉ THÊM `save-graph` (như E `-Json`); CLI `edit.ps1` BẤT BIẾN; coordinate-free; server dependency-free. Done-gate: `git diff hq/workflow.json` RỖNG (demo trên `edit-demo`).** |
 | `plan/hq-v2/ROADMAP.md` | Roadmap đợt TÁI THIẾT KẾ HQ (sau hq-improve, user nêu 2026-06-02): 5 phase H→L (HQ native team / token chi nhánh / rẽ-nhánh bơm-choices / HITL pause+ask / app UX) + 3 cross-cutting CD-1/2/3 đã chốt + §Dọn-legacy (gỡ workflow-HQ cũ cuối đợt). **⚠️ CD-1 ĐẢO quyết định cũ**: HQ chuyển sang team-of-agents native Claude Code; engine ps1 + app tái định vị CHỈ-lo-workflow-chi-nhánh. Mỗi phase = 1 long-plan riêng |
 | `plan/hq-v2/phase-0/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase 0 (Dọn sạch hq-workflow): 2 session — **✅ DONE (2026-06-02)**. Đã xoá `engine/e2e.ps1`+`engine/spec.ps1`+`examples/broken-web/`+`examples/e2e-harness-tests.ps1`; gỡ `build`/`autobuild`/`autofix`+alias khỏi `run.ps1`; gỡ `e2e-harness-tests` khỏi selftest (10→9); xoá `hq` special-case app; cập nhật README/CLAUDE.md/ROADMAP. **Giữ nguyên:** `catalog/`+`patterns/`+`engine/pattern.ps1`+`engine/sandbox.ps1`. |
+| `plan/hq-v2/phase-j/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase J (Rẽ nhánh chủ động, CD-2): 3 sub-phase / 5 session — **🟡 soạn xong, chưa thực thi**. J.1 `Get-RouterChoices` + bơm suffix choices vào prompt router real-mode · J.2 `Write-RouteIssue` + validate tập nhãn bơm + fail ngay (không retry) · J.3 `Get-RouterPayload` + tách route/payload + lưu `_payload` key tự động · J.4 fixture branchy + validate.ps1 warn + selftest update · J.5 docs + CLAUDE.md + ROADMAP done. **Quyết định đảo ROADMAP CD-2:** bỏ re-ask, fail ngay sau ghi issue-queue per-run. Mock-path `ENGINE_MOCK_ROUTER` bất biến. Regression selftest ≥9 PASS mỗi session. |
 | `plan/hq-v2/phase-h/PLAN.md` + `CHECKPOINT.md` + `design.md` | Long-plan Phase H (HQ → native team, CD-1): 5 sub-phase / 11 session — **🟡 ĐANG LÀM, H.0–H.3 xong (2026-06-02)**. H.0 `design.md` · H.1 nền (flag `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` + `.claude/memory` + playbook skeleton) · H.2–H.6 mỗi session 1 teammate `.claude/agents/hq-{researcher,planner,cto,builder,tester}.md` · H.7–H.8 skill (`build-verify`+`hq-memory`) · H.9 playbook đầy đủ · H.10 chạy thật (USER-GATE). **⚠️ REFRAME Q2 (2026-06-02):** teammate lậm form workflow cũ (hq-planner xuất JSON plan-as-data) → đảo: builder build TRỰC TIẾP (Write/Edit, KHÔNG engine-build) · giao tiếp prose (KHÔNG build-spec/plan-as-data) · legacy `hq/`+`examples/hq-*`+2 test script XÓA NGAY · selftest 12→10 · `engine-ops`→`build-verify` · soạn lại researcher+planner. Engine executor BẤT BIẾN (chỉ de-wire test-runner + comment spec.ps1); regression validate+run-Mock+selftest(10) mỗi session. Xem `design.md`/`PLAN.md` §Revise |
 | `plan/hq-improve/phase-a/PLAN.md` + `CHECKPOINT.md` | Long-plan Phase A (Audit): 3 sub-phase / 5 session — **THUẦN ĐỌC, không sửa code**. Deliverable = `findings.md` (mỗi mục: loại bug/chắp-vá/doc-UX + file:line + tác động + mức P0/P1/P2 + phase đích) + baseline test mock. A.1 baseline+surface sweep / A.2-A.4 deep-read 17 file engine theo cụm / A.5 synthesis+user gate. Default: thang P0/P1/P2, KHÔNG chạy E2E real (mock-only) |
 | `.claude/hq-master.md` | **HQ-team entry** — flow điều phối (lead-driven TaskList loop, KHÔNG linear) + roster 5 teammate + bảng ranh giới **engine KHÔNG phải HQ** + cách spawn cụ thể. Đọc TRƯỚC khi lập team. |

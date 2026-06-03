@@ -44,3 +44,10 @@
 - **Root cause**: Lead chưa load schema `TeamCreate`/`SendMessage` trước khi bắt đầu; Agent tool quen tay hơn TeamCreate.
 - **Fix**: Tạo team đúng bằng `TeamCreate` → `TaskCreate` → spawn teammate qua `Agent(team_name=...)` → `SendMessage` để giao việc.
 - **Status**: resolved (đã sửa ngay trong session)
+
+## 2026-06-03 10:05 — SILENT — teammate câm do tools allowlist
+- **Teammate**: cả 5 hq-* (lộ ở researcher trước)
+- **Triệu chứng**: teammate ack ready + làm việc nội bộ nhưng KHÔNG report; lead chỉ thấy idle_notification rỗng; TaskGet vẫn in_progress. Researcher tự nói "TaskUpdate/SendMessage không khả dụng".
+- **Root cause**: `tools:` allowlist hẹp (không có Task*/SendMessage) → CC strip tool điều phối khi spawn teammate.
+- **Trạng thái**: resolved
+- **Fix**: [RESOLVED 2026-06-03 edit:agent-body] thêm `TaskGet, TaskUpdate, TaskList, SendMessage` vào `tools:` cả 5 hq-*.md + note ở hq-master roster table. Xem mistakes.md `agent-tools-allowlist-strips-team-tools`.

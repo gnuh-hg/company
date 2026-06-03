@@ -12,3 +12,7 @@ projects/*/
 app/node_modules/
 app/dist/
 **/.layout.json
+
+# Issue log runtime do engine ghi (Phase J: route-issues.ndjson) — regen được, không commit.
+# Giữ các file .md hand-curated trong issues/ (vd team-issues-queue.md, README.md).
+issues/*.ndjson

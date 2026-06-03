@@ -167,9 +167,9 @@ CD-1 / CD-2 / CD-3 (đã chốt 2026-06-02)
 |---|---|---|
 | CD-1/CD-2/CD-3 (cross-cutting) | — | ✅ CHỐT (user 2026-06-02): HQ native team / rẽ-nhánh bơm-choices / HITL pause-policy |
 | ⓿ — Dọn sạch hq-workflow (ƯU TIÊN) | `plan/hq-v2/phase-0/` | ✅ DONE (2026-06-02). Đã xoá e2e.ps1/spec.ps1/broken-web/e2e-harness-tests; gỡ build/autobuild/autofix khỏi run.ps1; xoá hq special-case app; selftest 10→9; README/CLAUDE.md/ROADMAP cập nhật. Xem `phase-0/CHECKPOINT.md`. |
-| H — HQ team-of-agents native (#1) | `plan/hq-v2/phase-h/` | 🟡 ĐANG LÀM — H.0–H.3 xong (design.md + nền + researcher/planner). **REFRAME Q2 (2026-06-02):** teammate lậm form workflow cũ → đảo: build TRỰC TIẾP (không engine-build) · giao tiếp prose (không JSON/build-spec) · legacy `hq/`+`examples/hq-*`+2 test script XÓA NGAY (không chờ cuối roadmap) · selftest 12→10 · `engine-ops`→`build-verify` · soạn lại researcher+planner. Tiếp: H.4 cto (thiết kế prose). Xem `design.md`/`PLAN.md` §Revise |
+| H — HQ team-of-agents native (#1) | `plan/hq-v2/phase-h/` | ✅ DONE (2026-06-03). 11 session H.0–H.10 + reframe Q2 (build trực tiếp/prose/legacy xóa) + Q3 (HQ dựng CHI NHÁNH, không build app; engine+catalog là vật-liệu HQ). **H.10 chạy thật PASS**: lead drive TaskList loop, 5 teammate (researcher→planner→cto→builder→tester) dựng chi nhánh `projects/todo-web/` (workflow.json 5 node + roster từ catalog/), tester `CHECK_RESULT: pass` (validate exit 0 + run -Mock done + check). selftest 9/9, engine diff rỗng. Xem `phase-h/CHECKPOINT.md`. |
 | I — Tối ưu token chi nhánh (#2) | `plan/hq-v2/phase-i/` | 📋 Chưa làm — gồm ⭐ handoff-output (khoá với J) |
-| J — Rẽ nhánh chủ động (CD-2) | `plan/hq-v2/phase-j/` | 📋 Chưa làm |
+| J — Rẽ nhánh chủ động (CD-2) | `plan/hq-v2/phase-j/` | 🟡 soạn xong, chưa thực thi (2026-06-03). 3 phase / 5 session. J.1 bơm choices · J.2 validate+issue-queue · J.3 tách route/payload · J.4 fixture+selftest · J.5 docs. Quyết định đảo: bỏ re-ask, fail+queue ngay. Xem `plan/hq-v2/phase-j/`. |
 | K — HITL pause-policy + hỏi-user (#3, CD-3) | `plan/hq-v2/phase-k/` | 📋 Chưa làm |
 | L — App UX layout + I/O + form (#4+#5) | `plan/hq-v2/phase-l/` | 📋 Chưa làm |
 

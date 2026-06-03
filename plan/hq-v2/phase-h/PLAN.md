@@ -148,7 +148,8 @@ Vòng đời HQ-native cần điều phối ĐỘNG (không DAG): `request → r
 - Output: `playbook.md` đầy đủ + `team-issues-queue.md` + orchestration doc.
 
 ### Session H.10 — Done-gate: chạy thật end-to-end (USER-GATE, ĐỐT TOKEN)
-- Scope: với 1 request thật nhỏ (vd "landing page thu email"), lead bật team → research → plan → cto (thiết kế prose) → builder **Write/Edit dựng deliverable TRỰC TIẾP** vào `projects/<name>/` → tester chạy **check khách quan của deliverable** (test/build/lint) → record `.claude/memory/`, **hoàn toàn động** (không workflow.json, không engine-build). Thu `usage` token mỗi teammate (best-effort) + so sánh với HQ-workflow cũ (baseline ước lượng H.0). Ghi kết quả + 1 vòng "chạy thử" xác nhận từng teammate/skill hoạt động.
+> **⚠️ Q3 reframe (2026-06-03):** ví dụ cũ "build landing page thu email" SAI vai — HQ build app. Đúng: HQ dựng **CƠ SỞ MỘT CHI NHÁNH** (xem `global.md` memory + §Revise). H.10 thực: request "dựng 1 chi nhánh nhỏ build <X>" → builder Write/Edit `workflow.json` + `agents/*.md` (từ catalog) vào `projects/<branch>/` → tester `run.ps1 validate <branch>` exit 0 + `run -Mock` done.
+- Scope: với 1 request thật nhỏ ("dựng chi nhánh build <loại app nhỏ>"), lead bật team → research (catalog/engine) → plan (chi nhánh cần vai nào, done = validate+run-Mock) → cto (pipeline + roster từ `catalog/`) → builder **Write/Edit `projects/<branch>/workflow.json` + `agents/*.md` TRỰC TIẾP** → tester `run.ps1 validate/run -Mock` → record `.claude/memory/`, **hoàn toàn động**. Thu `usage` token mỗi teammate (best-effort). Ghi kết quả.
 - STOP gate = **Outcome cuối** (checklist done-gate tất cả tick). **User gate trước khi chạy** (đốt token — xác nhận như D-C1/Phase 5).
 - Output: branch thật trong `projects/` + báo cáo token trước/sau + memory entry + CHECKPOINT done.
 
@@ -159,17 +160,17 @@ Vòng đời HQ-native cần điều phối ĐỘNG (không DAG): `request → r
 ## Outcome cuối
 
 - HQ chạy như **native team**: 1 request → lead điều phối động → research/plan/cto/build/test/record qua teammate + skill, build TRỰC TIẾP (KHÔNG engine-build, KHÔNG `hq/workflow.json`).
-- **Done-gate (checklist đo được):**
-  - [ ] `design.md` chốt đủ 9 mục theo Q2; mọi "cần làm rõ" ROADMAP §H trả lời.
-  - [ ] Flag `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` bật; CC ≥ v2.1.32 verified.
-  - [ ] 5 teammate def `.claude/agents/hq-{researcher,planner,cto,builder,tester}.md` **form prose (KHÔNG JSON ceremony)**, mỗi cái đạt checklist (a)–(d).
-  - [ ] 2 skill project-scope (`build-verify` + `hq-memory`), mọi quy ước/lệnh tham chiếu thật.
-  - [ ] `.claude/memory/` 4 file + store HQ-team tách bạch `company/memory/` (engine `memory.ps1` BẤT BIẾN).
-  - [ ] `playbook.md` đủ 6 mục + flow động + `team-issues-queue.md`.
-  - [ ] **Chạy thật**: lead dựng + verify 1 deliverable TRỰC TIẾP (builder Write/Edit, tester check khách quan của deliverable), record memory — hoàn toàn động.
-  - [ ] Báo cáo token: team-native vs HQ-workflow cũ cho thấy giảm (hoặc giải thích nếu không).
-  - [ ] Legacy `hq/` + `examples/hq-*` + 2 test script **đã XÓA**; selftest 10/10; ghi nhận §Dọn-legacy ROADMAP.
-  - [ ] Regression (validate hello + run hello -Mock + selftest 10/10) PASS ở session cuối; ROADMAP hq-v2 bảng tiến độ Phase H → ✅.
+- **Done-gate (checklist đo được) — ✅ TẤT CẢ ĐẠT (2026-06-03):**
+  - [x] `design.md` chốt đủ 9 mục theo Q2; mọi "cần làm rõ" ROADMAP §H trả lời.
+  - [x] Flag `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` bật; CC ≥ v2.1.32 verified (2.1.160).
+  - [x] 5 teammate def `.claude/agents/hq-{researcher,planner,cto,builder,tester}.md` **form prose (KHÔNG JSON ceremony)**, mỗi cái đạt checklist (a)–(d) + tools đủ Task*/SendMessage (fix H.10-1).
+  - [x] 2 skill project-scope (`build-verify` + `hq-memory`), mọi quy ước/lệnh tham chiếu thật.
+  - [x] `.claude/memory/` 4 file + store HQ-team tách bạch `company/memory/` (engine `memory.ps1` BẤT BIẾN).
+  - [x] `playbook.md` đủ 6 mục + flow động + `team-issues-queue.md`.
+  - [x] **Chạy thật (H.10-2)**: lead dựng + verify chi nhánh `projects/todo-web/` TRỰC TIẾP (builder Write/Edit workflow.json+5 agents, tester `CHECK_RESULT: pass` validate/run-Mock/check), record memory — hoàn toàn động.
+  - [x] Báo cáo token: chain 5 vai 1 lượt không re-fix; ước thấp hơn HQ-workflow cũ (~20–30k, design.md §9).
+  - [x] Legacy `hq/` + `examples/hq-*` + 2 test script **đã XÓA**; selftest 9/9 (sau de-wire); §Dọn-legacy ROADMAP ghi nhận.
+  - [x] Regression (validate hello + run hello -Mock + selftest 9/9) PASS ở session cuối; engine diff rỗng. ROADMAP hq-v2 bảng tiến độ Phase H → ✅ (cập nhật).
 
 ---
 
@@ -179,3 +180,4 @@ Vòng đời HQ-native cần điều phối ĐỘNG (không DAG): `request → r
 | --- | --- | --- |
 | 2026-06-02 | Initial | Tạo từ ROADMAP hq-v2 Phase H. Chốt (user): orchestration=native team TeamCreate · builder ghi-file qua engine sandbox/promote · teammate gọi engine trực tiếp · memory→`.claude/memory/` (tách store engine branch) · legacy giữ tham chiếu + dọn cuối roadmap. Nền tài liệu: code.claude.com/docs agent-teams (flag experimental, teammate=subagent def, skills project-scope, hooks gate). |
 | 2026-06-02 | **REVISE Q2 (reframe giữa H-B)** | User chỉ ra teammate lậm form workflow cũ (hq-planner xuất JSON plan-as-data vô nghĩa). Đảo 3 quyết định cũ: (1) builder build TRỰC TIẾP Write/Edit, KHÔNG engine-build; (2) teammate giao tiếp prose, KHÔNG JSON/build-spec; (3) legacy `hq/`+`examples/hq-*`+2 test script XÓA (không giữ tham chiếu). Sửa: intro · Context locked-decisions · §H-B intro + H.3–H.6 · §H-C H.7 (`engine-ops`→`build-verify`) · H.9/H.10 · Outcome checklist · regression invariant (selftest 12→10, engine-diff ngoại lệ session này). Soạn lại `hq-researcher`+`hq-planner` form prose. Xem `design.md` §Revise. |
+| 2026-06-03 | **REVISE Q3 (giữa H.10 — vai trò HQ)** | User chỉ ra H.10 chạy SAI vai: HQ build app (landing page) trong khi vai HQ là **dựng CƠ SỞ CHI NHÁNH**, chi nhánh mới build app. Chốt (AskUserQuestion): deliverable HQ = chi nhánh cấu hình sẵn (`workflow.json` + roster `agents/*.md` từ `catalog/` + scaffold tại `projects/<branch>/`); builder Write/Edit tay (KHÔNG `autobuild`); tester verify `run.ps1 validate/run -Mock`. **Đảo một phần Q2**: engine = vật-liệu+verify của HQ (không còn "ngoài luồng"); `catalog/` = menu lại. Sửa: 5 agent body (builder/tester/cto rewrite; planner/researcher reframe) + skill `build-verify` + `hq-master.md` (§Engine + roster + flow) + `playbook.md` (§3/§7/§8/§10) + `CLAUDE.md` (§1/§2 + catalog/projects rows) + memory `global.md`. Cũng fix bug H.10: agent `tools:` thiếu Task*/SendMessage → teammate câm (đã thêm). Xoá deliverable sai `projects/email-landing`. |
