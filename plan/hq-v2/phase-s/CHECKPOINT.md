@@ -19,20 +19,20 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Session hoàn thành | 7 (S.0–S.6) | 2 (S.0–S.1) | 29% |
-| Agent mới | 2 (hq-self-builder, hq-self-tester) | 0 | 0% |
-| Skill mới | 1 (self-modify) | 0 | 0% |
-| Vai hạng nhất | #2 branch-edit + #3 self-mod | 0/2 | 0% |
+| Session hoàn thành | 7 (S.0–S.6) | 5 (S.0–S.4) | 71% |
+| Agent mới | 2 (hq-self-builder, hq-self-tester) | 2 | 100% |
+| Skill mới | 1 (self-modify) | 1 | 100% |
+| Vai hạng nhất | #2 branch-edit + #3 self-mod | 2/2 (agents xong) | 100% |
 | Real-run gate (S.6) | 5/5 tiêu chí | — | — |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: S.B (S.A xong)
-- **Session kế tiếp**: **S.2 — Skill `self-modify`** (`.claude/skills/self-modify/SKILL.md`)
+- **Phase**: S.B (S.A xong, S.2–S.4 xong)
+- **Session kế tiếp**: **S.5 — Orchestration wiring** (`hq-master.md` + `playbook.md` + `CLAUDE.md`)
 - **Blocker**: —
-- **Reference**: `PLAN.md` → Sub-phase S.B → Session S.2
+- **Reference**: `PLAN.md` → Sub-phase S.B → Session S.5
 
 ---
 
@@ -52,6 +52,27 @@
 - **Next**: Session S.1 — branch-edit #2 hạng nhất (`hq-master.md` + `playbook.md`).
 - **Notes**: không đụng engine → regression không cần chạy session này (constraint nhắc: chỉ khi chạm engine/.claude).
 
+### 2026-06-03 — Session S.2 DONE
+- **Done**: tạo `.claude/skills/self-modify/SKILL.md` — 7 mục đầy đủ: (1) scope được-ghi/CẤM; (2) procedure an toàn 5 bước (lệnh copy-paste, incl git restore); (3) re-spawn smoke checklist; (4) bootstrap/recursion caveat A/B/C; (5) changelog global.md format; (6) anti-patterns self-builder + self-tester; (7) quick reference.
+- **Output**: `.claude/skills/self-modify/SKILL.md`.
+- **Gate**: file tồn tại + frontmatter `name`/`description` hợp lệ + 7 mục đủ + lệnh gate khớp CLAUDE.md; skill xuất hiện trong "available skills" danh sách ✓; `selftest` 9/9 PASS ✓; `validate hello` exit 0 ✓; `run hello -Mock` done ✓; `.runs/` cần dọn (permission denied, dọn ở session sau hoặc tay).
+- **Next**: Session S.3 — agent `hq-self-builder` (`.claude/agents/hq-self-builder.md`).
+- **Notes**: skill tái dùng design.md procedure tường minh, bổ sung quick reference cho cả 2 vai (self-builder + self-tester). `.runs/` permission denied là bình thường trong sandbox — không ảnh hưởng regression.
+
+### 2026-06-03 — Session S.3 DONE
+- **Done**: tạo `.claude/agents/hq-self-builder.md` — frontmatter `name: hq-self-builder`, `tools:` đủ `Read,Write,Edit,Bash,TaskGet,TaskUpdate,TaskList,SendMessage`. Body: mission + "Đọc đầu phiên" 5 mục (skill self-modify + memory + TaskGet) + workflow 6 bước (baseline→edit→regression gate→restore→báo tester) + bảng scope cho-phép/CẤM + re-spawn smoke checklist + bootstrap caveat A/B/C + anti-patterns 9 mục + output format + quality gate + TeamCreate mode block.
+- **Output**: `.claude/agents/hq-self-builder.md`.
+- **Gate**: file tồn tại + frontmatter valid; scope/CẤM/procedure/gate/anti-patterns/TeamCreate đủ; `selftest` 9/9 PASS ✓; `validate hello` exit 0 ✓; `run hello -Mock` done ✓; `.runs/` đã dọn ✓.
+- **Next**: Session S.4 — agent `hq-self-tester` (`.claude/agents/hq-self-tester.md`).
+- **Notes**: agent không có tool `Agent`/`TeamCreate` → re-spawn smoke do lead thực hiện (đã ghi rõ trong §Re-spawn smoke). Mode-separation D-S4 nhấn mạnh trong description + anti-patterns.
+
+### 2026-06-03 — Session S.4 DONE
+- **Done**: tạo `.claude/agents/hq-self-tester.md` — frontmatter `name: hq-self-builder`, `tools:` đủ `Read,Bash,TaskGet,TaskUpdate,TaskList,SendMessage`. Body: mission + "Đọc đầu phiên" 5 mục (skill self-modify + memory + TaskGet) + workflow 6 bước (brief→gate regression→re-spawn smoke req→map criteria→in SELF_CHECK_RESULT→báo lead) + anti-patterns 9 mục (incl gate≠approval + auto-append global.md) + output format + quality gate + TeamCreate mode block.
+- **Output**: `.claude/agents/hq-self-tester.md`.
+- **Gate**: file tồn tại + frontmatter valid; gate commands/re-spawn smoke/SELF_CHECK_RESULT/anti-patterns/changelog draft/TeamCreate đủ; `selftest` 9/9 PASS ✓; `validate hello` exit 0 ✓; `run hello -Mock` done ✓.
+- **Next**: Session S.5 — Orchestration wiring (`hq-master.md` + `playbook.md` + `CLAUDE.md`).
+- **Notes**: tester KHÔNG có Agent/TeamCreate → re-spawn smoke do lead thực hiện theo checklist tester gửi (nhất quán với self-builder). Điểm phân biệt cốt lõi: `SELF_CHECK_RESULT` (≠ `CHECK_RESULT` của hq-tester) + gate≠done (user-approval mandatory sau gate).
+
 ### 2026-06-03 — Session S.1 DONE
 - **Done**: nâng branch-edit #2 thành **loại request hạng nhất** (doc-only). `hq-master.md`: thêm nhánh "SỬA chi nhánh ĐÃ CÓ theo yêu cầu user mới" vào sơ đồ phân loại + cập nhật bảng "Rút gọn chain" (chain `planner(light)→builder→tester`) + callout phân biệt với re-fix-từ-verdict + ghi builder đọc-trước/Edit-phẫu-thuật/không-ghi-đè. `playbook.md` §1: thêm dòng bảng "Khi nào lập team" + callout phân biệt re-fix; §3: per-role brief builder thêm note "khi SỬA chi nhánh đã có".
 - **Output**: `.claude/hq-master.md` + `.claude/teams/playbook.md` (diff branch-edit).
@@ -67,3 +88,5 @@
 | --- | --- | --- |
 | 2026-06-03 | Created from `PLAN.md` | planner |
 | 2026-06-03 | S.1 done — branch-edit #2 hạng nhất (hq-master + playbook) | builder |
+| 2026-06-03 | S.2 done — skill self-modify (.claude/skills/self-modify/SKILL.md, 7 mục) | builder |
+| 2026-06-03 | S.4 done — agent hq-self-tester (.claude/agents/hq-self-tester.md) | builder |
