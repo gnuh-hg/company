@@ -68,23 +68,25 @@ function Get-RunState {
 function Get-StatusColor {
     param([string]$Status)
     switch ($Status) {
-        'done'     { 'Green' }
-        'running'  { 'Cyan' }
-        'failed'   { 'Red' }
-        'awaiting' { 'Yellow' }
-        'pending'  { 'DarkGray' }
-        default    { 'Gray' }
+        'done'            { 'Green' }
+        'running'         { 'Cyan' }
+        'failed'          { 'Red' }
+        'awaiting'        { 'Yellow' }
+        'awaiting_input'  { 'Yellow' }   # K.5: pause:ask → awaiting_input (người cần trả lời câu hỏi)
+        'pending'         { 'DarkGray' }
+        default           { 'Gray' }
     }
 }
 
 function Get-VisitMark {
     param([string]$Status)
     switch ($Status) {
-        'done'     { '✓' }
-        'running'  { '…' }
-        'failed'   { '✗' }
-        'awaiting' { '⏸' }
-        default    { '?' }
+        'done'            { '✓' }
+        'running'         { '…' }
+        'failed'          { '✗' }
+        'awaiting'        { '⏸' }
+        'awaiting_input'  { '⏸' }   # K.5: paused chờ câu trả lời (cùng ký hiệu ⏸)
+        default           { '?' }
     }
 }
 
@@ -119,7 +121,7 @@ function Show-Status {
         Write-Host -NoNewline "Lỗi:     "
         Write-Host $err -ForegroundColor Red
     }
-    # D.4: hiện gate info + resume hint khi đang awaiting.
+    # D.4: hiện gate info + resume hint khi đang awaiting (approval).
     if ($state.status -eq 'awaiting') {
         $awaitData = Get-Prop $state 'awaiting'
         if ($awaitData) {
@@ -131,6 +133,18 @@ function Show-Status {
             if ($gatePrompt)         { Write-Host "  Prompt:  $gatePrompt" }
             if ($gateChoices.Count -gt 0) { Write-Host "  Choices: $($gateChoices -join ' | ')" }
             Write-Host "  Resume:  ./run.ps1 resume <proj> -Decision approve" -ForegroundColor Yellow
+        }
+    }
+    # K.5: hiện question + resume hint -Answer khi đang awaiting_input (pause:ask).
+    if ($state.status -eq 'awaiting_input') {
+        $awaitData = Get-Prop $state 'awaiting'
+        if ($awaitData) {
+            $askNode     = $awaitData.node
+            $askQuestion = if ($awaitData.question) { [string]$awaitData.question } else { '(không có câu hỏi)' }
+            Write-Host -NoNewline "Hỏi:     "
+            Write-Host "node '$askNode' — chờ câu trả lời từ người dùng" -ForegroundColor Yellow
+            Write-Host "  Câu hỏi: $askQuestion" -ForegroundColor Yellow
+            Write-Host "  Resume:  ./run.ps1 resume <proj> -Answer ""<câu trả lời>""" -ForegroundColor Yellow
         }
     }
 

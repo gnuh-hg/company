@@ -38,7 +38,7 @@ function Show-Help {
         '',
         'PROJECT — chạy & soi một workflow:',
         '  run      <proj> "<request>" [-Mock] [-Model m] [-AutoApprove]  Chạy pipeline end-to-end',
-        '  resume   <proj> [-Mock] [-Model m] [-Decision d] [-AutoApprove] Tiếp tục run dở/failed/awaiting',
+        '  resume   <proj> [-Mock] [-Model m] [-Decision d] [-Answer a] [-AutoApprove] Tiếp tục run dở/failed/awaiting',
         '  graph    <proj> [out.mmd]                        In DAG ASCII + xuất Mermaid        (cũ: viz)',
         '  validate <proj>                                  Kiểm tra DAG hợp lệ (cycle/agent/key)',
         '  status   <proj>                                  Trạng thái run gần nhất',
@@ -109,7 +109,7 @@ function Resolve-ProjectDir {
 function Split-DispatchArgs {
     param([string[]]$RawArgs)
     # [string[]] @() bị PowerShell ép về $null → guard trước khi đụng .Count (StrictMode).
-    if ($null -eq $RawArgs) { return @{ Positional = @(); Mock = $false; Model = $null; Real = $false; Router = $null; KeepSandbox = $false; Seed = $null; Branch = $null; Decision = $null; AutoApprove = $false; Json = $false } }
+    if ($null -eq $RawArgs) { return @{ Positional = @(); Mock = $false; Model = $null; Real = $false; Router = $null; KeepSandbox = $false; Seed = $null; Branch = $null; Decision = $null; Answer = $null; AutoApprove = $false; Json = $false } }
     $pos         = [System.Collections.Generic.List[string]]::new()
     $mock        = $false
     $model       = $null
@@ -119,6 +119,7 @@ function Split-DispatchArgs {
     $seed        = $null
     $branch      = $null
     $decision    = $null
+    $answer      = $null
     $autoApprove = $false
     $json        = $false
     for ($i = 0; $i -lt $RawArgs.Count; $i++) {
@@ -134,10 +135,11 @@ function Split-DispatchArgs {
             '^-Seed$'        { $i++; if ($i -lt $RawArgs.Count) { $seed = $RawArgs[$i] }     else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
             '^-Branch$'      { $i++; if ($i -lt $RawArgs.Count) { $branch = $RawArgs[$i] }   else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
             '^-Decision$'    { $i++; if ($i -lt $RawArgs.Count) { $decision = $RawArgs[$i] } else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
+            '^-Answer$'      { $i++; if ($i -lt $RawArgs.Count) { $answer = $RawArgs[$i] }   else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
             default          { $pos.Add($a) }
         }
     }
-    return @{ Positional = $pos.ToArray(); Mock = $mock; Model = $model; Real = $real; Router = $router; KeepSandbox = $keep; Seed = $seed; Branch = $branch; Decision = $decision; AutoApprove = $autoApprove; Json = $json }
+    return @{ Positional = $pos.ToArray(); Mock = $mock; Model = $model; Real = $real; Router = $router; KeepSandbox = $keep; Seed = $seed; Branch = $branch; Decision = $decision; Answer = $answer; AutoApprove = $autoApprove; Json = $json }
 }
 
 function Invoke-Dispatch {
@@ -207,13 +209,24 @@ function Invoke-Dispatch {
                 Write-Host "  Tiếp tục: ./run.ps1 resume $($pos[0]) -Decision approve" -ForegroundColor Yellow
                 return 3
             }
+            # K.5: awaiting_input — pause:ask node hỏi câu hỏi, chờ người trả lời.
+            if ((Get-Prop $finalState 'status') -eq 'awaiting_input') {
+                $awaitData    = Get-Prop $finalState 'awaiting'
+                $askNode      = if ($awaitData -and $awaitData.node)     { $awaitData.node }     else { '?' }
+                $askQuestion  = if ($awaitData -and $awaitData.question) { [string]$awaitData.question } else { '?' }
+                Write-Host "⏸ Run dừng — node '$askNode' (pause:ask) cần câu trả lời:" -ForegroundColor Yellow
+                Write-Host "  Câu hỏi: $askQuestion" -ForegroundColor Yellow
+                Write-Host "  Tiếp tục: ./run.ps1 resume $($pos[0]) -Answer ""<câu trả lời>"" [-Mock]" -ForegroundColor Yellow
+                return 4
+            }
             Write-Host "✓ Run xong → $runDir" -ForegroundColor Green
             return 0
         }
         'resume' {
             $decArg = if ($parsed.Decision) { $parsed.Decision } else { '' }
+            $ansArg = if ($parsed.Answer)   { $parsed.Answer }   else { '' }   # K.3: -Answer câu trả lời user
             try {
-                $runDir = Invoke-Workflow $projectDir -Resume -Mock:$parsed.Mock -Model $parsed.Model -Decision $decArg -AutoApprove:$parsed.AutoApprove
+                $runDir = Invoke-Workflow $projectDir -Resume -Mock:$parsed.Mock -Model $parsed.Model -Decision $decArg -Answer $ansArg -AutoApprove:$parsed.AutoApprove
             }
             catch {
                 Write-Host "✗ Resume thất bại: $($_.Exception.Message)" -ForegroundColor Red
@@ -230,6 +243,16 @@ function Invoke-Dispatch {
                 if ($gatePrompt) { Write-Host "  Prompt:  $gatePrompt" -ForegroundColor Yellow }
                 Write-Host "  Tiếp tục: ./run.ps1 resume $($pos[0]) -Decision approve" -ForegroundColor Yellow
                 return 3
+            }
+            # K.5: resume cũng có thể dừng lại tại awaiting_input kế (node pause:ask hỏi tiếp).
+            if ((Get-Prop $finalState 'status') -eq 'awaiting_input') {
+                $awaitData    = Get-Prop $finalState 'awaiting'
+                $askNode      = if ($awaitData -and $awaitData.node)     { $awaitData.node }     else { '?' }
+                $askQuestion  = if ($awaitData -and $awaitData.question) { [string]$awaitData.question } else { '?' }
+                Write-Host "⏸ Resume dừng — node '$askNode' (pause:ask) cần câu trả lời:" -ForegroundColor Yellow
+                Write-Host "  Câu hỏi: $askQuestion" -ForegroundColor Yellow
+                Write-Host "  Tiếp tục: ./run.ps1 resume $($pos[0]) -Answer ""<câu trả lời>"" [-Mock]" -ForegroundColor Yellow
+                return 4
             }
             Write-Host "✓ Resume xong → $runDir" -ForegroundColor Green
             return 0

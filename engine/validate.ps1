@@ -34,7 +34,10 @@ $script:TrialKinds = @('non-empty', 'contains', 'matches')
 # Key reserved do bridge nạp đầu vòng đời (read-path memory, Phase M) — luôn resolve được,
 # không cần producer. Khớp 3 key Get-Memory trả (engine/memory.ps1) + engine_run (wiring 5.3,
 # đường tuyệt đối tới run.ps1 cho Builder, Initialize-Context nạp).
-$script:ReservedKeys = @('user_request', 'mem_mistakes', 'mem_patterns', 'mem_context', 'engine_run')
+$script:ReservedKeys = @('user_request', 'mem_mistakes', 'mem_patterns', 'mem_context', 'engine_run', 'user_answer')
+
+# Enum hợp lệ cho field `pause` trên node worker (Phase K.1). Vắng → 'none' (bất biến).
+$script:PauseValues = @('none', 'always', 'ask')
 
 function Get-PromptKeys {
     <#
@@ -186,6 +189,18 @@ function Test-Workflow {
                 $errors.Add("node ${nodeLabel}: type '$type' không hợp lệ (chỉ chấp nhận 'approval' hoặc vắng/worker)")
                 $type = 'work'
             }
+            # Phase K.1: validate field `pause` (chính sách dừng, chỉ dành cho worker node).
+            # approval node đã là gate người-duyệt — cấm gộp pause thêm vào.
+            $pauseVal = Get-Prop $n 'pause'
+            if ($null -ne $pauseVal -and -not [string]::IsNullOrWhiteSpace($pauseVal)) {
+                if ($type -eq 'approval') {
+                    $errors.Add("node ${nodeLabel}: 'pause' không được dùng trên node type 'approval' (approval đã là gate người-duyệt; dùng pause trên worker node)")
+                }
+                elseif ($pauseVal -notin $script:PauseValues) {
+                    $errors.Add("node ${nodeLabel}: pause '$pauseVal' không hợp lệ (chỉ chấp nhận: $($script:PauseValues -join ', '))")
+                }
+            }
+
             # approval (Phase D) = gate người-duyệt, KHÔNG gọi model → chỉ cần 'id'
             # (agent/input/output_key không bắt buộc). Node khác cần đủ 4 field.
             $required = if ($type -eq 'approval') { @('id') } else { @('id', 'agent', 'input', 'output_key') }
@@ -198,6 +213,7 @@ function Test-Workflow {
                 id = $id; agent = (Get-Prop $n 'agent'); type = $type
                 input = (Get-Prop $n 'input'); output_key = (Get-Prop $n 'output_key')
                 memory_write = (Get-Prop $n 'memory_write')
+                pause = $pauseVal
             })
             $idx++
         }

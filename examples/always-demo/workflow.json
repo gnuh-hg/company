@@ -1,0 +1,23 @@
+{
+  "name": "always-demo",
+  "entry": "work",
+  "max_steps": 10,
+  "nodes": [
+    {
+      "id": "work",
+      "agent": "agents/work.md",
+      "pause": "always",
+      "input": "{{user_request}}",
+      "output_key": "work_out"
+    },
+    {
+      "id": "report",
+      "agent": "agents/report.md",
+      "input": "Kết quả: {{work_out}}",
+      "output_key": "result"
+    }
+  ],
+  "edges": [
+    { "from": "work", "to": "report" }
+  ]
+}

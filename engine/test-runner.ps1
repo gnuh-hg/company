@@ -1,7 +1,8 @@
 # test-runner.ps1 — surface gom bộ test ENGINE (Phase B.3, lệnh `run.ps1 selftest`).
 #
 # CHỈ gom + đếm + báo (D-B3): 7 stamp + mem-demo done-gate +
-# approval-demo done-gate + branchy 2-part protocol (J.4) →
+# approval-demo done-gate + branchy 2-part protocol (J.4) +
+# ask-demo done-gate (K.5: pause:ask → awaiting_input → resume -Answer → done) →
 # in PASS/FAIL từng mục + bảng tổng → exit = số mục fail.
 # Mock-only, 0 token. KHÔNG đụng engine executor (workflow/graph/validate).
 #
@@ -92,13 +93,21 @@ function Clear-ApprovalDemoArtifacts {
     if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
 }
 
+function Clear-AskDemoArtifacts {
+    <# .SYNOPSIS Dọn .runs/ của ask-demo (K.5: fixture phải start sạch + không để rác). #>
+    param([Parameter(Mandatory)][string]$Dir)
+    $p = Join-Path $Dir '.runs'
+    if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
+}
+
 function Invoke-SelfTest {
     <#
     .SYNOPSIS
         Chạy bộ test engine: 7 p-*/stamp.ps1 (subprocess) +
         mem-demo done-gate (2-run -Mock inline) + approval-demo done-gate (pause→resume→done inline) +
-        branchy 2-part protocol (route/payload split, J.4).
-        In PASS/FAIL từng mục + bảng tổng. 10 mục tổng.
+        branchy 2-part protocol (route/payload split, J.4) +
+        ask-demo done-gate (pause:ask → awaiting_input → resume -Answer → done, K.5).
+        In PASS/FAIL từng mục + bảng tổng. 11 mục tổng.
     .OUTPUTS [int] số mục FAIL (0 = tất cả pass).
     #>
     param([string[]]$Pos)   # [all] hiện không phân nhóm — luôn chạy hết (B surface).
@@ -225,6 +234,47 @@ function Invoke-SelfTest {
     $items.Add([pscustomobject]@{ Name = 'branchy/2-part-protocol'; Pass = $bpOk; Detail = $bpDetail })
     Write-SelfTestLine 'branchy/2-part-protocol' $bpOk $bpDetail
 
+    # 6) ask-demo done-gate (pause:ask → awaiting_input → resume -Answer → done, K.5) ---
+    Write-Host ''
+    Write-Host '── ask-demo (done-gate ask→answer→done) ──'
+    $askDir  = Join-Path $examples 'ask-demo'
+    $askRuns = Join-Path $askDir '.runs'
+    $askOk = $false; $askDetail = ''
+    try {
+        Clear-AskDemoArtifacts $askDir
+        # Run 1: clarify trả ASK_USER: → pause awaiting_input
+        $savedMockAsk = $env:ENGINE_MOCK_ROUTER
+        $env:ENGINE_MOCK_ROUTER = 'clarify:ASK_USER: Màu sắc mong muốn là gì?'
+        try {
+            $aRun1   = Invoke-Workflow $askDir 'selftest ask' -Mock 6> $null
+            $aStatus1 = [string](Get-RunState $aRun1).status
+        }
+        finally {
+            if ($null -ne $savedMockAsk) { $env:ENGINE_MOCK_ROUTER = $savedMockAsk }
+            else { Remove-Item Env:ENGINE_MOCK_ROUTER -ErrorAction SilentlyContinue }
+        }
+        # Run 2: resume -Answer → clarify re-run (mock default, không ASK_USER:) → done
+        $aRun2    = Invoke-Workflow $askDir -Mock -Resume -Answer 'màu xanh selftest' 6> $null
+        $aStatus2 = [string](Get-RunState $aRun2).status
+        # Kiểm prompt re-run chứa answer (chứng minh {{user_answer}} tiêm thật)
+        $promptFiles = @(Get-ChildItem -LiteralPath $aRun2 -Filter '*-clarify.prompt.txt' -ErrorAction SilentlyContinue)
+        $hasAnswer = $false
+        foreach ($pf in $promptFiles) {
+            $content = Get-Content -LiteralPath $pf.FullName -Raw -Encoding utf8
+            if ($content -like '*màu xanh selftest*') { $hasAnswer = $true; break }
+        }
+        $askOk     = ($aStatus1 -eq 'awaiting_input' -and $aStatus2 -eq 'done' -and $hasAnswer)
+        $askDetail = "run1=$aStatus1 run2(resume -Answer)=$aStatus2 answer-in-prompt=$hasAnswer"
+    }
+    catch {
+        $askOk = $false; $askDetail = $_.Exception.Message
+    }
+    finally {
+        Clear-AskDemoArtifacts $askDir
+    }
+    $items.Add([pscustomobject]@{ Name = 'ask-demo/done-gate'; Pass = $askOk; Detail = $askDetail })
+    Write-SelfTestLine 'ask-demo/done-gate' $askOk $askDetail
+
     # Bảng tổng -----------------------------------------------------------------
     $fails = @($items | Where-Object { -not $_.Pass }).Count
     $total = $items.Count
@@ -238,7 +288,7 @@ function Invoke-SelfTest {
     else {
         Write-Host "✗ selftest: $fails/$total FAIL" -ForegroundColor Red
     }
-    Write-Host '  (C.6: stamp assert nội dung node id; C.7: mem-demo assert "run2 ≠ run1"; D.6: approval-demo pause→resume→done; J.4: branchy 2-part route/payload)' -ForegroundColor DarkGray
+    Write-Host '  (C.6: stamp assert nội dung node id; C.7: mem-demo assert "run2 ≠ run1"; D.6: approval-demo pause→resume→done; J.4: branchy 2-part route/payload; K.5: ask-demo pause:ask→answer→done)' -ForegroundColor DarkGray
     return $fails
 }
 

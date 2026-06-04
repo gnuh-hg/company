@@ -14,6 +14,11 @@
 Set-StrictMode -Version Latest
 
 # Loại event hợp lệ — 1 nguồn để D.3/D.6 mở rộng + (tuỳ) guard typo.
+# Phase K (D-K4): event `awaiting` mang thêm field `kind`:
+#   kind='approval' — dừng chờ người duyệt (type:approval node hoặc pause:always worker)
+#   kind='input'    — dừng chờ câu trả lời (pause:ask worker, marker ASK_USER:)
+# event `resumed` cũng mang `kind` tương ứng (approval: {decision,cursor} / input: {answer}).
+# KHÔNG thêm loại event mới — app/SSE (Phase L) phân biệt qua field `kind`.
 $script:EventTypes = @(
     'run_start', 'node_start', 'node_output', 'node_done',
     'awaiting', 'resumed', 'diff_violation', 'run_end'

@@ -49,10 +49,14 @@ function Get-GraphMermaid {
             $lines.Add(('    {0}{{{{"⏸ {1}"}}}}' -f $n.id, $label))   # hexagon (gate người-duyệt)
         }
         elseif (@($Graph.adj[$n.id]).Count -ge 2) {
-            $lines.Add(('    {0}{{"{1}"}}' -f $n.id, $label))           # diamond (điểm rẽ ≥2 cạnh)
+            # diamond (điểm rẽ ≥2 cạnh); K: thêm pause marker vào label nếu có.
+            $pauseTag = if ($n.pause -eq 'ask') { '⏸ask ' } elseif ($n.pause -eq 'always') { '⏸always ' } else { '' }
+            $lines.Add(('    {0}{{"{1}{2}"}}' -f $n.id, $pauseTag, $label))
         }
         else {
-            $lines.Add(('    {0}["{1}"]' -f $n.id, $label))
+            # K: pause:ask / pause:always worker → prefix label với marker.
+            $pauseTag = if ($n.pause -eq 'ask') { '⏸ask ' } elseif ($n.pause -eq 'always') { '⏸always ' } else { '' }
+            $lines.Add(('    {0}["{1}{2}"]' -f $n.id, $pauseTag, $label))
         }
     }
     foreach ($e in $Graph.edges) {
@@ -89,6 +93,9 @@ function Format-GraphAscii {
         if ($n.id -eq $Graph.entry)                   { $tags += 'entry' }
         if (@($Graph.adj[$n.id]).Count -ge 2)         { $tags += 'branch' }
         if ($n.type -eq 'approval')                   { $tags += 'approval' }
+        # K: pause:ask / pause:always → thêm tag ASCII vào danh sách (KHÔNG phá approval hexagon).
+        if ($n.pause -eq 'ask')    { $tags += '⏸ask' }
+        elseif ($n.pause -eq 'always') { $tags += '⏸always' }
         $tag = if ($tags.Count -gt 0) { ' (' + ($tags -join ', ') + ')' } else { '' }
         $key = if (-not [string]::IsNullOrWhiteSpace($n.output_key)) { " →$($n.output_key)" } else { '' }
         $mark = if ($n.type -eq 'approval') { '⏸ ' } else { '' }

@@ -48,6 +48,9 @@ function Initialize-Context {
     # Reserved key {{engine_run}} (wiring 5.3): đường dẫn tuyệt đối tới run.ps1 — Builder chạy
     # trong cwd=sandbox (depth biến thiên) cần gọi `pwsh {{engine_run}} build ...` ổn định.
     $ctx['engine_run'] = (Join-Path $PSScriptRoot 'run.ps1')
+    # Phase K.1: pre-seed {{user_answer}} = '' → cho phép node pause:ask dùng {{user_answer}}
+    # ngay lần đầu (khi chưa có câu trả lời, resolve thành rỗng thay vì throw).
+    $ctx['user_answer'] = ''
     foreach ($n in $Graph.nodes) {
         $k = $n.output_key
         if (-not [string]::IsNullOrWhiteSpace($k) -and -not $ctx.ContainsKey($k)) { $ctx[$k] = '' }
@@ -219,6 +222,28 @@ function Get-RouterPayload {
     return ($lines[0..($lastIdx - 1)] -join "`n").TrimEnd()
 }
 
+function Get-AskRequest {
+    <#
+    .SYNOPSIS
+        Parse marker `ASK_USER:` trong output agent → trả câu hỏi nếu có, $null nếu không.
+    .DESCRIPTION
+        Phase K.2 (D-K1): Tín hiệu ask = marker văn bản `ASK_USER: <câu hỏi>` (không forced tool-use).
+        Tìm dòng ĐẦU TIÊN bắt đầu bằng "ASK_USER:" (trim, case-insensitive). Trả text sau marker (trim).
+        Output không chứa marker → $null. Output rỗng hoặc marker không có câu hỏi → $null.
+        Cùng họ ConvertTo-RouterLabel / Get-RouterPayload. Dot-source-safe, mock-an-toàn.
+    .OUTPUTS [string] câu hỏi (non-null, non-empty) nếu tìm thấy, $null nếu không có marker.
+    #>
+    param([AllowEmptyString()][string]$Output)
+    $lines = @($Output -split "`r?`n")
+    foreach ($line in $lines) {
+        if ($line.TrimStart() -match '(?i)^ASK_USER:\s*(.+)$') {
+            $question = $Matches[1].Trim()
+            if (-not [string]::IsNullOrWhiteSpace($question)) { return $question }
+        }
+    }
+    return $null
+}
+
 function Test-NodeBranches {
     <#
     .SYNOPSIS
@@ -369,6 +394,7 @@ function Invoke-Workflow {
         [string]$Model,
         [switch]$Resume,
         [string]$Decision = '',    # D.3: approve|reject|<label> khi resume từ approval gate
+        [string]$Answer   = '',    # K.3: câu trả lời user khi resume từ awaiting_input (pause:ask)
         [switch]$AutoApprove,      # D.4: tự duyệt gate happy-path (cho selftest/CI mock offline)
         [scriptblock]$OnStepFail
     )
@@ -431,11 +457,35 @@ function Invoke-Workflow {
             if ($v.seq -gt $seq) { $seq = $v.seq }
         }
 
+        # K.3: awaiting_input resume — TÁCH RIÊNG nhánh awaiting_input khỏi nhánh approval D.3.
+        # cursor = node đã hỏi (re-run, KHÔNG advance như approval). Tiêm user_answer vào context.
+        $awaitingInputResume = $false
+        $awaitInputNode      = $null
+        if ($state.status -eq 'awaiting_input') {
+            $awaitData2 = Get-Prop $state 'awaiting'
+            if ($awaitData2) {
+                $awaitInputNode = $awaitData2.node
+                # Tiêm câu trả lời: Resolve-Prompt sẽ điền {{user_answer}} trong prompt re-run.
+                $context['user_answer'] = $Answer
+                # Đưa lượt 'awaiting' vào visits status='done' (đã xử lý câu hỏi) để iter count đúng.
+                foreach ($av2 in @($rawVisits | Where-Object { $_.status -eq 'awaiting' })) {
+                    $visits.Add([ordered]@{ seq = $av2.seq; node = $av2.node; iter = $av2.iter; status = 'done'; output_key = $av2.output_key; error = $null })
+                    $prevIter3 = if ($iterCount.ContainsKey($av2.node)) { $iterCount[$av2.node] } else { 0 }
+                    $iterCount[$av2.node] = $prevIter3 + 1
+                    if ($av2.seq -gt $seq) { $seq = $av2.seq }
+                }
+                # cursor = node đã hỏi → re-run (khác approval: approval advance sang node kế).
+                $cursor = $awaitInputNode
+                $awaitingInputResume = $true
+            }
+        }
+
         # D.3: Awaiting resume — resolve decision → cursor trước khi chạy tiếp sau approval gate.
+        # Guard: chỉ chạy khi KHÔNG phải awaiting_input (K.3 tách riêng nhánh này).
         $awaitingResume = $false
         $awaitNode      = $null
         $decLabel       = ''
-        if ($state.status -eq 'awaiting') {
+        if (-not $awaitingInputResume -and $state.status -eq 'awaiting') {
             $awaitData = Get-Prop $state 'awaiting'
             if ($awaitData) {
                 $awaitNode = $awaitData.node
@@ -467,7 +517,7 @@ function Invoke-Workflow {
             }
         }
 
-        if (-not $awaitingResume) {
+        if (-not $awaitingResume -and -not $awaitingInputResume) {
             # Cursor: lượt chưa-done đầu tiên → retry node đó; nếu mọi lượt done → đi cạnh sau node done cuối.
             $pending = @($rawVisits | Where-Object { $_.status -ne 'done' })
             if ($pending.Count -gt 0) {
@@ -490,8 +540,8 @@ function Invoke-Workflow {
         $state.status   = 'running'
         $state.finished = $null
         if ($state.PSObject.Properties.Name -contains 'error') { $state.error = $null }
-        # D.3: xoá field 'awaiting' khi resume từ gate (set null để JSON vẫn ghi được).
-        if ($awaitingResume) {
+        # Xoá field 'awaiting' khi resume (cả nhánh approval D.3 và awaiting_input K.3).
+        if ($awaitingResume -or $awaitingInputResume) {
             if ($state -is [System.Collections.IDictionary]) {
                 if ($state.Contains('awaiting')) { [void]$state.Remove('awaiting') }
             } else {
@@ -501,8 +551,13 @@ function Invoke-Workflow {
         $state.visits = @($visits)
         Write-Json (Join-Path $runDir 'state.json') $state
         Write-Log "Resume run → $runDir (tiếp từ node '$cursor', seq=$seq)" -Level INFO -LogFile $logFile
+        # D.3: event resumed cho approval (decision + cursor kế).
         if ($awaitingResume) {
             Write-Event $runDir 'resumed' @{ node = $awaitNode; decision = $decLabel; cursor = $cursor }
+        }
+        # K.3: event resumed cho awaiting_input (kind=input + answer).
+        if ($awaitingInputResume) {
+            Write-Event $runDir 'resumed' @{ node = $awaitInputNode; kind = 'input'; answer = $Answer }
         }
     }
     else {
@@ -693,6 +748,38 @@ function Invoke-Workflow {
         Set-Content -LiteralPath (Join-Path $runDir "$base.out.txt") -Value $output -Encoding utf8
         # D.1: node_output mang NỘI DUNG output ĐẦY ĐỦ (đóng #3 "(N chars)" → full content).
         Write-Event $runDir 'node_output' @{ node = $cursor; agent = $node.agent; step = $seq; output = [string]$output }
+
+        # K.2: Pause:ask — nếu node pause='ask' VÀ output chứa marker ASK_USER: → pause awaiting_input.
+        # SONG SONG nhánh approval (D.3, type=approval) — KHÔNG đụng nhánh đó.
+        # KHÔNG ghi output_key (node chưa hoàn thành; output_key chỉ ghi khi node DONE).
+        $nodePause = if ($null -ne $node.pause -and -not [string]::IsNullOrWhiteSpace($node.pause)) { [string]$node.pause } else { 'none' }
+        if ($nodePause -eq 'ask') {
+            $askQuestion = Get-AskRequest $output
+            if ($null -ne $askQuestion) {
+                # K.4: -AutoApprove + pause:ask → fail-rõ (headless không có người trả lời câu hỏi).
+                # Đồng nhất D.4 "headless default fail-rõ" — KHÔNG auto-skip với answer rỗng.
+                if ($AutoApprove) {
+                    throw "AutoApprove: node '$cursor' (pause:ask) trả marker ASK_USER nhưng headless không thể tự trả lời — dùng run.ps1 resume $($graph.name) -Answer '<câu trả lời>'."
+                }
+                $visit.status   = 'awaiting'
+                $awaitInfoAsk   = [ordered]@{ node = $cursor; kind = 'input'; question = $askQuestion; prompt = $prompt }
+                if ($state -is [System.Collections.IDictionary]) {
+                    $state['awaiting'] = $awaitInfoAsk
+                } else {
+                    $state | Add-Member -NotePropertyName 'awaiting' -NotePropertyValue $awaitInfoAsk -Force
+                }
+                $state.status   = 'awaiting_input'
+                $state.finished = $null
+                $state.visits   = @($visits)
+                Write-Json $statePath $state
+                Write-Log "[$seq] node '$cursor' (pause:ask) → awaiting_input. Question: $askQuestion" -Level INFO -LogFile $logFile
+                Write-Json (Join-Path $runsDir 'latest.json') ([ordered]@{ run = (Split-Path -Leaf $runDir); status = 'awaiting_input' })
+                Write-Event $runDir 'awaiting' @{ node = $cursor; kind = 'input'; question = $askQuestion; step = $seq }
+                return $runDir
+            }
+            # Không có marker → node hoàn thành bình thường (đi tiếp).
+        }
+
         if (-not [string]::IsNullOrWhiteSpace($node.output_key)) {
             Set-Content -LiteralPath (Join-Path $runDir "$($node.output_key).txt") -Value $output -Encoding utf8
             $context[$node.output_key] = $output
@@ -714,6 +801,37 @@ function Invoke-Workflow {
             }
             catch {
                 Write-Log "[$seq] node '$cursor' memory_write LỖI — $($_.Exception.Message)" -Level WARN -LogFile $logFile
+            }
+        }
+
+        # K.4: Pause:always — agent ĐÃ chạy, output_key ĐÃ ghi, memory ĐÃ ghi → THEN pause.
+        # REUSE trạng thái awaiting (D.3 resume -Decision sẽ advance cursor bình thường).
+        # KHÁC type:approval: always ĐÃ gọi model + ĐÃ ghi output_key trước khi pause.
+        if ($nodePause -eq 'always') {
+            $alwaysOuts = @($graph.adj[$cursor])
+            $alwaysChoices = @($alwaysOuts | ForEach-Object { if (-not [string]::IsNullOrWhiteSpace($_.when)) { $_.when } else { 'approve' } })
+
+            # K.4: -AutoApprove → skip gate, tiếp tục bình thường (như D.4 với approval node).
+            if ($AutoApprove) {
+                Write-Log "[$seq] node '$cursor' (pause:always) → auto-approve (AutoApprove), đi tiếp" -Level INFO -LogFile $logFile
+                # Fall through: visit.status='done' + Select-NextNode bên dưới xử lý.
+            } else {
+                $visit.status    = 'awaiting'
+                $alwaysPrompt    = "Node '$cursor' đã hoàn thành (output_key='$($node.output_key)') — duyệt để tiếp tục?"
+                $awaitInfoAlways = [ordered]@{ node = $cursor; kind = 'approval'; prompt = $alwaysPrompt; choices = $alwaysChoices }
+                if ($state -is [System.Collections.IDictionary]) {
+                    $state['awaiting'] = $awaitInfoAlways
+                } else {
+                    $state | Add-Member -NotePropertyName 'awaiting' -NotePropertyValue $awaitInfoAlways -Force
+                }
+                $state.status   = 'awaiting'
+                $state.finished = $null
+                $state.visits   = @($visits)
+                Write-Json $statePath $state
+                Write-Log "[$seq] node '$cursor' (pause:always) → awaiting (output_key '$($node.output_key)' đã ghi). Resume: run.ps1 resume $($graph.name) -Decision approve" -Level INFO -LogFile $logFile
+                Write-Json (Join-Path $runsDir 'latest.json') ([ordered]@{ run = (Split-Path -Leaf $runDir); status = 'awaiting' })
+                Write-Event $runDir 'awaiting' @{ node = $cursor; kind = 'approval'; choices = $alwaysChoices; step = $seq }
+                return $runDir
             }
         }
 

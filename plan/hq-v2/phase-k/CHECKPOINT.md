@@ -38,25 +38,66 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 6 | 0 | 0% |
-| Sub-phase done (K.A/K.B/K.C) | 3 | 0 | 0% |
-| selftest mục | 11 (từ 10) | 10 | — |
-| Done-gate tổng (K.6) | 4/4 | — | — |
+| Sessions hoàn thành | 6 | 6 | 100% ✅ |
+| Sub-phase done (K.A/K.B/K.C) | 3 | 3 (K.A,K.B,K.C) | 100% ✅ |
+| selftest mục | 11 (từ 10) | 11 | ✅ |
+| Done-gate tổng (K.6) | 4/4 | 4/4 | ✅ |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: K.A — Foundation
-- **Session kế tiếp**: K.1 — Schema `pause` enum + validate + `user_answer` reserved + fixture `ask-demo` skeleton
+- **Phase**: ✅ PHASE K HOÀN TẤT (K.A + K.B + K.C DONE, 2026-06-04)
+- **Session kế tiếp**: — (không còn). Chờ user duyệt git diff (D-S2) → commit.
 - **Blocker**: —
-- **Reference**: `PLAN.md` → Phase K.A → Session K.1
+- **Reference**: done-gate tổng 4/4 PASS · selftest 11/11 · git scope sạch
 
 ---
 
 ## Per-session log
 
-_(chưa có session nào — điền sau mỗi session theo mẫu dưới)_
+### 2026-06-04 — Session K.1
+- Done: validate.ps1 pause enum (none|always|ask) + cấm pause trên approval node + user_answer vào ReservedKeys; workflow.ps1 Initialize-Context pre-seed user_answer=''; fixture examples/ask-demo/ (clarify pause:ask → build → terminal + 2 agent stub)
+- Output: engine/validate.ps1, engine/workflow.ps1, examples/ask-demo/{workflow.json,agents/clarify.md,agents/build.md}
+- Gate: PASS — selftest 10/10, validate ask-demo exit 0, validate hello exit 0, run hello -Mock done, ca âm pause:bogus → exit 1 (lỗi enum rõ), ca âm pause trên approval → lỗi rõ
+- Next: Session K.2 — Get-AskRequest + pause:ask → awaiting_input
+- Notes: self-tester verify độc lập (tmp copy cho ca âm, đã dọn). KHÔNG đụng .claude/agents → không cần re-spawn smoke. Changelog draft chờ user duyệt cuối phase.
+
+### 2026-06-04 — Session K.2
+- Done: workflow.ps1 helper thuần Get-AskRequest (parse marker ASK_USER:) + pause:ask pause-path (sau node_output event, trước ghi output_key) → state awaiting_input + event awaiting kind=input; graph.ps1 ConvertTo-NormNode passthrough field `pause`
+- Output: engine/workflow.ps1, engine/graph.ps1
+- Gate: PASS (10/10 criteria) — ask-demo mock → status=awaiting_input, awaiting.kind=input, question có nội dung, output_key spec.txt CHƯA ghi; selftest 10/10; approval-demo D.3 bất biến; validate hello exit 0; run hello -Mock done
+- Next: Session K.3 — resume -Answer re-run node
+- Notes: Phase K.A DONE. Mock dùng ENGINE_MOCK_ROUTER="clarify:ASK_USER: ...". KHÔNG đụng .claude/agents.
+
+### 2026-06-04 — Session K.3
+- Done: workflow.ps1 Invoke-Workflow -Answer param + nhánh awaiting_input resume (tách riêng D.3 qua guard `-not $awaitingInputResume`, cursor=node-hỏi re-run, tiêm user_answer, iter++); run.ps1 -Answer flag + truyền vào resume (pull-forward từ K.5)
+- Output: engine/workflow.ps1, engine/run.ps1
+- Gate: PASS (11/11) — full round-trip ask-demo: run→awaiting_input → resume -Answer "dùng màu xanh" → done; 2-clarify.prompt.txt chứa answer; result.txt tồn tại; event resumed kind=input; selftest 10/10; approval-demo D.3 bất biến (line 484 mutually exclusive)
+- Next: Session K.4 — pause:always run-then-gate
+- Notes: Mock run1 set marker, resume KHÔNG set ENGINE_MOCK_ROUTER (default mock không có ASK_USER:) → re-run hoàn thành. K.5 giảm scope (run.ps1 -Answer đã xong).
+
+### 2026-06-04 — Session K.4
+- Done: workflow.ps1 pause:always run-then-gate (output_key ghi TRƯỚC pause line 784, reuse awaiting/approval D.3 resume) + AutoApprove skip always + AutoApprove fail-rõ với pause:ask; fixture examples/always-demo/ (work pause:always → report) riêng để không phá K.3 round-trip
+- Output: engine/workflow.ps1, examples/always-demo/{workflow.json,agents/work.md,agents/report.md}
+- Gate: PASS (11/11) — always-demo run→awaiting kind=approval, work_out.txt pre-pause; resume -Decision approve → done; AutoApprove always=skip ask=fail-rõ; selftest 10/10; approval-demo D.3 bất biến
+- Next: Session K.5 — status.ps1 surface + selftest #11
+- Notes: Phase K.B DONE. Fixture riêng always-demo (không sửa ask-demo). enum pause 3 giá trị hoàn chỉnh.
+
+### 2026-06-04 — Session K.5
+- Done: run.ps1 run/resume return 4 + in hint -Answer + câu hỏi khi awaiting_input + Show-Help dòng resume; status.ps1 awaiting_input surface (question+hint, Get-StatusColor/Get-VisitMark ⏸); events.ps1 comment kind=approval|input; test-runner.ps1 selftest #11 ask-demo/done-gate (10→11)
+- Output: engine/run.ps1, engine/status.ps1, engine/events.ps1, engine/test-runner.ps1
+- Gate: PASS (12/12) — selftest 11/11 (mục #11 ask-demo/done-gate PASS, approval-demo + branchy bất biến); run ask-demo exit=4+hint+question; resume -Answer→done; status surface; validate hello exit 0; run hello -Mock done
+- Next: Session K.6 — viz marker + docs + done-gate 4/4
+- Notes: baseline selftest GIỜ = 11/11. run.ps1 -Answer parse đã có từ K.3.
+
+### 2026-06-04 — Session K.6 (CUỐI)
+- Done: viz.ps1 tag ⏸ask/⏸always (ASCII + Mermaid, approval hexagon + branch diamond bất biến); docs CLAUDE.md (file-map + bất biến #2 + phase-k ✅), README.md (section pause-policy + resume -Answer + selftest 11), ROADMAP Phase K ✅ DONE
+- Output: engine/viz.ps1, company/README.md, company/CLAUDE.md, plan/hq-v2/ROADMAP.md
+- Gate: PASS — done-gate tổng 4/4 (ask round-trip; always round-trip; selftest 11/11 none/cũ bất biến; validate+run+viz pause marker); git scope sạch (KHÔNG đụng projects/ hay .claude/agents/)
+- Next: — (Phase K HOÀN TẤT). Chờ user duyệt git diff → commit (D-S2).
+- Notes: Phase K.C DONE. Self-tester chuẩn bị changelog draft tổng hợp self-mod/phase-K-HITL-pause-policy (append global.md SAU khi user approve).
+
 
 ```
 ### YYYY-MM-DD — Session K.x

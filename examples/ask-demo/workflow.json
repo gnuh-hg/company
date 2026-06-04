@@ -1,0 +1,23 @@
+{
+  "name": "ask-demo",
+  "entry": "clarify",
+  "max_steps": 20,
+  "nodes": [
+    {
+      "id": "clarify",
+      "agent": "agents/clarify.md",
+      "pause": "ask",
+      "input": "Yêu cầu người dùng: {{user_request}}\nCâu trả lời (nếu có): {{user_answer}}",
+      "output_key": "spec"
+    },
+    {
+      "id": "build",
+      "agent": "agents/build.md",
+      "input": "Spec đã xác nhận: {{spec}}",
+      "output_key": "result"
+    }
+  ],
+  "edges": [
+    { "from": "clarify", "to": "build" }
+  ]
+}

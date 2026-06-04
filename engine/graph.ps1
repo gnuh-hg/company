@@ -41,6 +41,7 @@ function ConvertTo-NormNode {
         output_key   = Get-Prop $Raw 'output_key'
         memory_write = Get-Prop $Raw 'memory_write'   # Phase M-B: loại ghi (node record), $null nếu vắng
         prompt       = $prompt                          # Phase D: text gate approval, $null nếu vắng
+        pause        = Get-Prop $Raw 'pause'            # Phase K: chính sách dừng none|always|ask, $null→'none'
     }
 }
 
