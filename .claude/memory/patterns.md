@@ -60,3 +60,35 @@ Session K.5: run.ps1 return 4 khi awaiting_input + in "⏸ Run dừng — node .
 ## 2026-06-04 09:50 — K.6-docs-viz-done-gate-pass
 
 Session K.6 (Phase K final): engine/viz.ps1 thêm tag ASCII `(⏸ask)` / `(⏸always)` trên node worker có pause:ask/always (approval hexagon bất biến). Docs: CLAUDE.md invariant #2 thêm pause+user_answer reserved; bảng file-map 6 rows Phase K; ask-demo/always-demo entries. README §HITL pause-policy. ROADMAP K ✅ DONE. Done-gate 4/4 + git status scope-clean. Phase K pattern: (1) validate K.1 + (2) executor K.2 + (3) resume K.3 + (4) always K.4 + (5) surface K.5 + (6) docs/viz K.6 = hoàn chỉnh pipeline HITL pause-policy. selftest 11/11 baseline từ K.5.
+
+## 2026-06-04 10:25 — I.A.1-usage-capture-pass
+
+Session I.A.1: engine/lib/claude.ps1 thêm [ref]$UsageOut out-param (guard ContainsKey → backward-compat: callers không truyền -UsageOut nhận string như cũ). Mock-path: proxy {prompt_chars, output_chars, mock=true} trả trước return. Real-path: parse .usage JSON từ --output-format json. engine/workflow.ps1 bắt -UsageOut per node + emit event node_usage sau node_output (seq n+1). engine/events.ps1 thêm 'node_usage' vào $script:EventTypes. Verify: events.ndjson hello run có 2 node_usage entries (node a: prompt_chars=1 output_chars=15, node b: prompt_chars=17 output_chars=31, mock=true, non-zero). selftest 11/11, validate hello exit 0, run -Mock done. Không đụng .claude/agents/*.md → không cần re-spawn smoke. Vòng 1.
+
+## 2026-06-04 10:39 — I.A.2-tokens-command-baseline-pass
+
+Session I.A.2: engine/tokens.ps1 (NEW) hàm thuần Get-RunTokens đọc events.ndjson → bảng per-node (agent/prompt_chars/output_chars/proxy_tok) + TỔNG. Direct-run guard: `if ($MyInvocation.InvocationName -ne '.')`. engine/run.ps1 dot-source tokens.ps1 + dispatch 'tokens' (allowlist + case) + -Run flag + help entry. plan/hq-v2/phase-i/baseline.md: 3 fixture (loopy/branchy/web-demo) với số proxy mock làm mốc. Verify: tokens loopy → bảng 4 node + TỔNG exit 0; no-project → exit 2 graceful + help; dot-source → exit 0 no exec; direct-run → bảng đúng; baseline.md 3 sections. selftest 11/11, validate hello exit 0, run -Mock done. Không đụng .claude/agents/*.md → no re-spawn smoke. Vòng 1.
+
+## 2026-06-04 15:02 — I.B.1-model-tier-haiku-pass
+
+Session I.B.1: examples/loopy/agents/verdict-router.md + examples/branchy/agents/tier-router.md thêm `model: claude-haiku-4-5-20251001` frontmatter. catalog/README.md thêm §Convention model-tiering (bảng branching/gate→Haiku, worker→default). Wire: Get-AgentFrontmatter → $nodeModel → Invoke-Claude -Model; comment "Mock-path KHÔNG dùng các cờ này → output mock bất biến." (workflow.ps1 line 697). selftest 11/11, validate hello/loopy/branchy exit 0, run hello/loopy/branchy -Mock done. grep model:haiku = 2 file fixture. Không đụng .claude/agents/*.md → no re-spawn smoke. .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 15:44 — I.B.2-template-trim-pass
+
+Session I.B.2: bỏ {{spec}} khỏi schema+auth (web-demo), bỏ {{test}} khỏi ship (loopy) trong workflow.json. catalog/README.md §Guideline tối thiểu-key. baseline.md §I.B.2 trước/sau. Kết quả: web-demo TỔNG prompt_chars=1403 < 2315 baseline ✓; loopy TỔNG=59 < 157 baseline ✓. Cascade logic xác nhận: trim schema→cascade api→auth→fe→deploy→qa. Sanity: schema cần tasks (tech-lead chắt lọc spec+design); auth cần api (encode spec); ship sau verdict:pass không cần test log. selftest 11/11, validate 4 fixture exit 0, run -Mock done. Không đụng .claude/agents/*.md → no re-spawn smoke. .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 16:06 — I.C.1-artifact-by-ref-pass
+
+Session I.C.1: engine/workflow.ps1 thêm _ref pre-seed + post-node path-set + resume restore. engine/validate.ps1 block output_key suffix `_ref` + WARN {{x_ref}} không có x output_key. engine/test-runner.ps1 selftest 11→12 (ref-demo/done-gate, `.Contains` bug fix). examples/ref-demo/ (NEW). Bằng chứng cốt lõi: 2-reader.prompt.txt = PATH thuần (`.../report.txt`), không chứa `[MOCK:writer]`. selftest: path-in-prompt=True, fulltext-in-prompt=False. validate block: exit=2 "suffix reserved cho artifact-by-reference". Additive: hello/loopy/branchy/web-demo không dùng _ref → path+done y hệt. selftest 12/12, validate 5 fixture exit 0. .runs/ + /tmp/test-ref-block đã dọn. Không đụng .claude/agents/*.md → no re-spawn smoke. Vòng 1.
+
+## 2026-06-04 16:36 — I.C.2-handoff-payload-pass
+
+Session I.C.2: examples/loopy/agents/verdict-router.md định dạng 2-phần shaped (fail→FIX:..., pass→gọn). examples/loopy/agents/build.md dùng {{verdict_payload}}. examples/loopy/workflow.json build input {{verdict_payload}} thay {{verdict}}. patterns/README.md §Giao thức 2-phần. Bằng chứng: 4-build.prompt.txt = "x\nFIX: error on line 42" — payload đích, KHÔNG có nhãn "fail". 2-loop route đúng: build→test→verdict(fail)→build(iter2)→test→verdict(pass)→ship. selftest 12/12, validate 5 fixture exit 0. Engine KHÔNG đổi — chỉ fixture+doc. Không đụng .claude/agents/*.md → no re-spawn smoke. .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 16:49 — I.C.3-single-consumer-pass
+
+Session I.C.3: engine/workflow.ps1 thêm Test-SingleConsumer (~55 dòng) — helper thuần dot-source-safe, trả True khi key có đúng 1 consumer KHÔNG trên cycle. Runtime KHÔNG tự-trim (keep-full by default; trim = opt-in). 9 cases: hello-a=True, hello-b=False(0 consumer), web-demo-spec=False(3 consumer), web-demo-tasks=True, branchy-tier=True, ref-demo-report=True, loopy-build/verdict/test=False(cycle). Điểm quyết định comment line 878-879. Lossless: 5 graph cũ path+done y hệt. selftest 12/12, validate 5 fixture exit 0. dot-source: không self-exec + Test-SingleConsumer available. .runs/ đã dọn. Không đụng .claude/agents/*.md → no re-spawn smoke. Vòng 1.
+
+## 2026-06-04 17:16 — I.D.1-caching-doc-pass
+
+Session I.D.1 (doc-only): caching.md NEW tại plan/hq-v2/phase-i/. Kết luận rõ: (1) không có --cache flag tường minh; (2) --exclude-dynamic-system-prompt-sections bị ignored với --system-prompt-file; (3) --betas defer đến I.D.2 (API-key only); (4) engine hiện tại đúng thứ tự stable-then-variable; (5) cách đo I.D.2 qua cache_creation/cache_read_input_tokens (đã wire I.A.1). Engine không đổi (git status plan/: chỉ caching.md+CHECKPOINT.md). selftest 12/12, validate hello exit 0, run -Mock done. Không đụng .claude/agents/*.md → no re-spawn smoke. .runs/ đã dọn. Vòng 1.

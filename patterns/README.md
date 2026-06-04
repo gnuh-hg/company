@@ -87,3 +87,64 @@ examples/p-<name>/workflow.json  →  validate + run -Mock
 
 Demo wrapper mẫu: [`../examples/p-do-verify-loop/`](../examples/p-do-verify-loop/)
 (`stamp.ps1` tái sinh `workflow.json` từ fragment). Helper: [`../engine/pattern.ps1`](../engine/pattern.ps1).
+
+---
+
+## Giao thức 2-phần: dòng route + payload đích (Phase J / I.C.2)
+
+> **Khi nào dùng:** node branching (outdeg≥2) cần truyền context CỤ THỂ cho nhánh được-chọn — thay vì phát thông tin chung cho mọi successor.
+
+### Cơ chế (Phase J, engine bất biến)
+
+```
+Agent output:
+  <payload đích cho nhánh>    ← 0..N dòng, shaped CHO nhánh sẽ đi
+  <nhãn route>                ← dòng cuối không-trắng, khớp `when` cạnh ra
+
+Engine:
+  1. Route theo dòng cuối (ConvertTo-RouterLabel)
+  2. Auto-store <output_key>_payload = mọi dòng trước nhãn (Get-RouterPayload)
+  3. Successor dùng {{<output_key>_payload}} nhận payload đúng nhánh
+```
+
+### Nguyên tắc "định-hướng-đích"
+
+| Nhánh | Payload nên chứa | Payload nên tránh |
+|---|---|---|
+| `fail` (→ fix loop) | Chẩn đoán + hành động cụ thể cho fixer | Thông tin về nhánh `pass` (irrelevant) |
+| `pass` (→ terminal) | Tóm tắt ngắn hoặc rỗng | Chỉ dẫn sửa dài (node không cần) |
+| `escalate` | Lý do + context cho escalation handler | Thông tin nhánh `resolved` |
+| `need_clarify` | Câu hỏi cụ thể cần user trả lời | Detail kỹ thuật |
+
+**Nguyên tắc:** agent BIẾT nhánh nào sẽ đi (chính nó quyết định nhãn) → payload shaped tối ưu cho đúng nhánh đó. Tránh "one-size-fits-all" payload vừa dài vừa pha trộn context hai nhánh.
+
+### Ví dụ — verdict-router (loopy)
+
+```
+# Nhánh fail: payload = fix guidance cho builder
+FIX: NullPointerException tại method processOrder() — kiểm tra null trước khi gọi .toString()
+fail
+
+# Nhánh pass: payload ngắn (ship không cần giải thích)
+pass
+```
+
+```json
+// workflow.json — build node dùng {{verdict_payload}} thay vì {{verdict}} (tránh nhúng nhãn)
+{ "id": "build", "input": "{{user_request}}\n{{verdict_payload}}", "output_key": "build" }
+```
+
+Mock demo:
+```bash
+$env:ENGINE_MOCK_ROUTER = "verdict-router:FIX: error on line 42\nfail,pass"
+# → iter 1: verdict_payload="FIX: error on line 42", route=fail → build nhận fix guidance
+# → iter 2: verdict_payload="", route=pass → ship (không cần payload)
+```
+
+### So sánh `{{key}}` vs `{{key_payload}}` vs `{{key_ref}}`
+
+| Token | Giá trị | Khi nào dùng |
+|---|---|---|
+| `{{key}}` | Full output của node (inline) | Node sinh output ngắn / cần toàn văn |
+| `{{key_payload}}` | Payload 2-phần (trước nhãn route) | Successor của branching node — nhận shaped context |
+| `{{key_ref}}` | Đường dẫn tới `.txt` file | Output lớn (>2000 chars) — consumer tự Read chọn lọc |

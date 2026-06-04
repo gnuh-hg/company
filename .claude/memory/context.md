@@ -60,3 +60,35 @@ Self-mod K.5 verify. Files đổi: engine/run.ps1 (exit=4 + hint -Answer + câu 
 ## 2026-06-04 09:50 — K.6-final-verify-pass
 
 Self-mod K.6 verify (CUỐI Phase K). Files đổi K.6: engine/viz.ps1 (pause marker), CLAUDE.md, README.md, ROADMAP.md. Done-gate tổng 4/4: (1) ask mock→awaiting_input→resume→done+prompt-xanh; (2) always mock→awaiting kind=approval+work_out.txt pre-pause→resume→done; (3) selftest 11/11 PASS; (4) validate hello/run hello + graph ask-demo(⏸ask)+always-demo(⏸always) không lỗi. Git status: engine/*.ps1 + ask-demo + always-demo + docs — KHÔNG đụng projects/ hay .claude/agents/. CLAUDE.md invariant #2 có pause+user_answer reserved. ROADMAP Phase K ✅ DONE. Phase K hoàn toàn verified. Vòng 1.
+
+## 2026-06-04 10:25 — I.A.1-verify-pass
+
+Self-mod I.A.1 verify. Files đổi: engine/lib/claude.ps1 ([ref]$UsageOut + mock proxy + real usage parse), engine/workflow.ps1 ($nodeUsage + -UsageOut + node_usage event), engine/events.ps1 ('node_usage' in EventTypes). Verdict: PASS. selftest 11/11, validate hello exit 0, run -Mock done. events.ndjson: 2 node_usage entries (node a: prompt_chars=1/output_chars=15; node b: prompt_chars=17/output_chars=31; mock=true). Backward-compat: PSBoundParameters.ContainsKey('UsageOut') guard → callers không truyền -UsageOut nhận string như cũ (selftest+run PASS chứng minh). Không đụng .claude/agents/*.md → no re-spawn smoke. .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 10:39 — I.A.2-verify-pass
+
+Self-mod I.A.2 verify. Files đổi: engine/tokens.ps1 (NEW: Get-RunTokens/Show-RunTokens + direct-run guard), engine/run.ps1 (dot-source + 'tokens' dispatch + -Run flag + help), plan/hq-v2/phase-i/baseline.md (NEW: 3 fixtures). Verdict: PASS. selftest 11/11, validate hello exit 0, run -Mock done. tokens loopy → 4 node table + TỔNG exit 0 (build:4/15, test:15/27, verdict:27/4, ship:43/55). no-project → exit 2 graceful. dot-source → exit 0 no exec. direct-run → bảng đúng. baseline.md 3 sections (loopy/branchy/web-demo). Không đụng .claude/agents/*.md. .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 15:02 — I.B.1-verify-pass
+
+Self-mod I.B.1 verify. Files đổi: examples/loopy/agents/verdict-router.md, examples/branchy/agents/tier-router.md, catalog/README.md, plan/hq-v2/phase-i/CHECKPOINT.md. Verdict: PASS. selftest 11/11, validate hello/loopy/branchy exit 0, run -Mock done (verdict-router:pass + tier-router:gt1000). grep model:haiku = 2 fixture. Convention catalog/README.md §model-tiering tồn tại. Wire code-confirmed: Get-AgentFrontmatter→$nodeModel→Invoke-Claude, mock-path skip. Không đụng .claude/agents/*.md → no re-spawn smoke. .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 15:44 — I.B.2-verify-pass
+
+Self-mod I.B.2 verify. Files đổi: examples/web-demo/workflow.json (schema bỏ {{spec}}, auth bỏ {{spec}}), examples/loopy/workflow.json+agents/ship.md (ship bỏ {{test}}), catalog/README.md (§Guideline tối thiểu-key), baseline.md (§I.B.2), CHECKPOINT.md. Verdict: PASS. selftest 11/11, validate hello/web-demo/loopy/branchy exit 0, run web-demo-Mock 11-node done + run loopy-Mock done. tokens web-demo TỔNG=1403 < 2315 ✓; tokens loopy TỔNG=59 < 157 ✓. Guideline + baseline.md §I.B.2 tồn tại. Sanity trim hợp lý. .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 16:06 — I.C.1-verify-pass
+
+Self-mod I.C.1 verify. Files đổi: engine/workflow.ps1 (_ref pre-seed+path-set+resume), engine/validate.ps1 (block _ref suffix + WARN), engine/test-runner.ps1 (12 mục, .Contains fix), examples/ref-demo/ (NEW). Verdict: PASS. 2-reader.prompt.txt = path thuần (.../report.txt), không chứa [MOCK:writer]. selftest 12/12 (path-in-prompt=True, fulltext-in-prompt=False). validate block exit=2 + lỗi rõ. Additive: 4 graph cũ path+done bất biến. validate 5 fixture exit 0. .runs/ đã dọn. Vòng 1. Baseline selftest từ I.C.1 = 12/12.
+
+## 2026-06-04 16:36 — I.C.2-verify-pass
+
+Self-mod I.C.2 verify. Files đổi: examples/loopy/agents/verdict-router.md (2-phần shaped), examples/loopy/agents/build.md (verdict_payload), examples/loopy/workflow.json (build input), patterns/README.md (§Giao thức 2-phần), CHECKPOINT.md. Verdict: PASS. 4-build.prompt.txt = "x\nFIX: error on line 42" (payload đích, không có "fail"). 2-loop path: build→test→verdict→build(iter2)→test→verdict→ship. selftest 12/12, validate 5 exit 0. Engine không đổi (fixture+doc only). .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 16:49 — I.C.3-verify-pass
+
+Self-mod I.C.3 verify. Files đổi: engine/workflow.ps1 (Test-SingleConsumer + comment điểm quyết định line 878), CHECKPOINT.md. Verdict: PASS. 9/9 case đúng (True/False per spec). Lossless: 5 graph -Mock done, output chars y hệt. dot-source: no self-exec + function available. selftest 12/12, validate 5 exit 0. Runtime KHÔNG đổi (keep-full by design). .runs/ đã dọn. Vòng 1.
+
+## 2026-06-04 17:16 — I.D.1-verify-pass
+
+Self-mod I.D.1 verify. Files đổi: plan/hq-v2/phase-i/caching.md (NEW), plan/hq-v2/phase-i/CHECKPOINT.md. Verdict: PASS. caching.md: kết luận rõ (no --cache flag; --exclude-dynamic bị ignored; --betas defer; structure OK; cách đo I.D.2 qua cache_creation/read). Engine không đổi (git status plan/ chỉ 2 file plan; engine changes = từ sessions I.A-I.C). selftest 12/12, validate hello exit 0, run -Mock done. .runs/ đã dọn. Vòng 1. I.D.1 = last session trước real-run gate (I.D.2 user-gate).

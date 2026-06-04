@@ -8,6 +8,7 @@
 #   validate  <proj>                                  → validate.ps1  (Test-Workflow)
 #   status    <proj>                                  → status.ps1 (Show-Status, state v2)
 #   logs      <proj> [node]                           → status.ps1 (Show-Logs, theo lượt thăm)
+#   tokens    <proj> [-Run <runid>]                   → tokens.ps1  (Get-RunTokens, I.A.2)
 #   edit      <proj>                                  → edit.ps1      (Invoke-Edit, TUI)
 #   selftest  [all]                                   → test-runner.ps1 (Invoke-SelfTest)
 #
@@ -26,6 +27,7 @@ $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $here 'sandbox.ps1')
 . (Join-Path $here 'test-runner.ps1')
 . (Join-Path $here 'save.ps1')
+. (Join-Path $here 'tokens.ps1')   # I.A.2: lệnh tokens
 
 function Show-Help {
     <#
@@ -43,6 +45,7 @@ function Show-Help {
         '  validate <proj>                                  Kiểm tra DAG hợp lệ (cycle/agent/key)',
         '  status   <proj>                                  Trạng thái run gần nhất',
         '  logs     <proj> [node]                           Prompt/output từng lượt thăm',
+        '  tokens   <proj> [-Run <runid>]                   Báo cáo token per-node + tổng (I.A.2)',
         '  check    <proj>                                  Tester tầng cấu trúc (validate+run-Mock+output-key)',
         '  trial    <proj> [-Model m]                       Tester tầng trial THẬT (assert trial[])',
         '',
@@ -109,7 +112,7 @@ function Resolve-ProjectDir {
 function Split-DispatchArgs {
     param([string[]]$RawArgs)
     # [string[]] @() bị PowerShell ép về $null → guard trước khi đụng .Count (StrictMode).
-    if ($null -eq $RawArgs) { return @{ Positional = @(); Mock = $false; Model = $null; Real = $false; Router = $null; KeepSandbox = $false; Seed = $null; Branch = $null; Decision = $null; Answer = $null; AutoApprove = $false; Json = $false } }
+    if ($null -eq $RawArgs) { return @{ Positional = @(); Mock = $false; Model = $null; Real = $false; Router = $null; KeepSandbox = $false; Seed = $null; Branch = $null; Decision = $null; Answer = $null; AutoApprove = $false; Json = $false; Run = $null } }
     $pos         = [System.Collections.Generic.List[string]]::new()
     $mock        = $false
     $model       = $null
@@ -122,6 +125,7 @@ function Split-DispatchArgs {
     $answer      = $null
     $autoApprove = $false
     $json        = $false
+    $run         = $null   # I.A.2: -Run <runid> cho lệnh tokens
     for ($i = 0; $i -lt $RawArgs.Count; $i++) {
         $a = $RawArgs[$i]
         switch -Regex ($a) {
@@ -136,10 +140,11 @@ function Split-DispatchArgs {
             '^-Branch$'      { $i++; if ($i -lt $RawArgs.Count) { $branch = $RawArgs[$i] }   else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
             '^-Decision$'    { $i++; if ($i -lt $RawArgs.Count) { $decision = $RawArgs[$i] } else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
             '^-Answer$'      { $i++; if ($i -lt $RawArgs.Count) { $answer = $RawArgs[$i] }   else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
+            '^-Run$'         { $i++; if ($i -lt $RawArgs.Count) { $run    = $RawArgs[$i] }   else { Write-Warning "Flag '$a' thiếu value — bỏ qua." } }
             default          { $pos.Add($a) }
         }
     }
-    return @{ Positional = $pos.ToArray(); Mock = $mock; Model = $model; Real = $real; Router = $router; KeepSandbox = $keep; Seed = $seed; Branch = $branch; Decision = $decision; Answer = $answer; AutoApprove = $autoApprove; Json = $json }
+    return @{ Positional = $pos.ToArray(); Mock = $mock; Model = $model; Real = $real; Router = $router; KeepSandbox = $keep; Seed = $seed; Branch = $branch; Decision = $decision; Answer = $answer; AutoApprove = $autoApprove; Json = $json; Run = $run }
 }
 
 function Invoke-Dispatch {
@@ -164,7 +169,7 @@ function Invoke-Dispatch {
 
     if ($command -in @('help', '-h', '--help')) { Show-Help; return 0 }
 
-    if ($command -notin @('run', 'resume', 'graph', 'validate', 'check', 'trial', 'status', 'logs', 'edit', 'save-graph', 'selftest')) {
+    if ($command -notin @('run', 'resume', 'graph', 'validate', 'check', 'trial', 'status', 'logs', 'tokens', 'edit', 'save-graph', 'selftest')) {
         Write-Host "Command không hợp lệ: '$command'" -ForegroundColor Red
         Write-Host ''
         Show-Help
@@ -317,6 +322,36 @@ function Invoke-Dispatch {
         'logs'   {
             $stepArg = if ($pos.Count -ge 2) { $pos[1] } else { $null }
             Show-Logs $projectDir $stepArg
+            return 0
+        }
+        'tokens' {
+            # I.A.2: in token report per-node + tổng.
+            # -Run <runid>: dùng run chỉ định (runid là tên thư mục trong .runs/).
+            # Mặc định: run mới nhất (reuse Get-LatestRunDir từ status.ps1).
+            try {
+                $runDir = if ($parsed.Run) {
+                    $runsDir  = Join-Path $projectDir '.runs'
+                    $candidate = Join-Path $runsDir $parsed.Run
+                    if (-not (Test-Path -LiteralPath $candidate)) {
+                        throw "Không tìm thấy run '$($parsed.Run)' trong $runsDir"
+                    }
+                    $candidate
+                } else {
+                    Get-LatestRunDir $projectDir
+                }
+            }
+            catch {
+                Write-Host "tokens: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "  Chạy 'run.ps1 run $($pos[0]) ...' trước để có dữ liệu." -ForegroundColor Yellow
+                return 2
+            }
+            $evPath = Join-Path $runDir 'events.ndjson'
+            if (-not (Test-Path -LiteralPath $evPath)) {
+                Write-Host "tokens: không có events.ndjson trong $runDir" -ForegroundColor Red
+                Write-Host "  (Run này chạy trước Phase I.A.1? Thử chạy lại.)" -ForegroundColor Yellow
+                return 2
+            }
+            Show-RunTokens $runDir
             return 0
         }
         'edit'       { return (Invoke-Edit $projectDir) }

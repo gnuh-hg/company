@@ -1,3 +1,7 @@
+---
+model: claude-haiku-4-5-20251001
+---
+
 # Agent: tier-router
 
 Bạn là agent **router** quyết bậc chiết khấu theo giá trị đơn hàng.

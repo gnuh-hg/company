@@ -27,7 +27,10 @@ function Invoke-Claude {
                                   # rơi vào đúng project (Phase 5.3). Vắng = giữ cwd hiện tại.
         [string]$NodeId,          # id node đang chạy (A-02, C.8): cho ENGINE_MOCK_ROUTER keyed-by-node.
                                   # Vắng = chỉ keyed-by-agent (tương thích cũ). Mock-only; real bỏ qua.
-        [string]$RunDir = ''      # A-08 (C.10): thư mục run để ghi stderr real-mode riêng (claude.stderr.log).
+        [string]$RunDir = '',     # A-08 (C.10): thư mục run để ghi stderr real-mode riêng (claude.stderr.log).
+        [ref]$UsageOut            # I.A.1: out-param nhận usage (real: .usage JSON; mock: proxy chars/4).
+                                  # Vắng = bỏ qua (additive, chữ ký cũ vẫn callable không cần truyền).
+                                  # Khai báo không có default → $PSBoundParameters.ContainsKey() đúng.
     )
 
     if (-not (Test-Path -LiteralPath $SystemPromptFile)) {
@@ -56,9 +59,13 @@ function Invoke-Claude {
         #   → 2 node router CHUNG 1 agent file dùng spec keyed-by-node để steer ĐỘC LẬP (counter tách
         #   theo key đã match). Spec keyed-by-agent CŨ chạy y nguyên (NodeId không match → rơi agent-pass).
         #   Bộ đếm keyed theo $matchKey đã match → keyed-by-node và keyed-by-agent không share counter.
+        #
+        # I.A.1: refactor 2 return → 1 return duy nhất (để điền UsageOut proxy trước khi trả).
+        # Output mock byte-identical: router trả nhãn, normal trả "[MOCK:agent]\n$Prompt".
+        $mockOut = $null
         if ($env:ENGINE_MOCK_ROUTER) {
             $entries = @($env:ENGINE_MOCK_ROUTER -split ';' | Where-Object { $_.Trim() })
-            foreach ($matchKey in @($NodeId, $agent)) {
+            :outerLoop foreach ($matchKey in @($NodeId, $agent)) {
                 if ([string]::IsNullOrWhiteSpace($matchKey)) { continue }
                 foreach ($entry in $entries) {
                     $spec = $entry -split ':', 2
@@ -67,13 +74,28 @@ function Invoke-Claude {
                         $n = if ($script:MockAgentCalls.ContainsKey($matchKey)) { $script:MockAgentCalls[$matchKey] } else { 0 }
                         $script:MockAgentCalls[$matchKey] = $n + 1
                         $idx = [Math]::Min($n, $labels.Count - 1)
-                        return $labels[$idx]
+                        $mockOut = $labels[$idx]
+                        break outerLoop
                     }
                 }
             }
         }
         # Output xác định: tiền tố agent + nguyên văn prompt. Cùng input → cùng output.
-        return "[MOCK:$agent]`n$Prompt"
+        if (-not $mockOut) { $mockOut = "[MOCK:$agent]`n$Prompt" }
+        # I.A.1: proxy usage (chars/4 ≈ token proxy) — điền TRƯỚC return; guard ContainsKey.
+        if ($PSBoundParameters.ContainsKey('UsageOut')) {
+            $UsageOut.Value = @{
+                prompt_chars   = $Prompt.Length
+                output_chars   = $mockOut.Length
+                mock           = $true
+                input_tokens   = $null
+                output_tokens  = $null
+                cache_creation = $null
+                cache_read     = $null
+                cost           = $null
+            }
+        }
+        return $mockOut
     }
 
     # --- Real mode: gọi claude CLI (chỉ chạy khi không -Mock; không test ở Session 1.1) ---
@@ -130,11 +152,27 @@ function Invoke-Claude {
     try {
         $parsed = ($raw | Out-String) | ConvertFrom-Json
         if ($parsed.PSObject.Properties.Name -contains 'result') {
+            # I.A.1: bắt usage từ JSON trước khi trả (additive; vắng UsageOut → bỏ qua).
+            if ($PSBoundParameters.ContainsKey('UsageOut')) {
+                $u = @{ input_tokens = $null; output_tokens = $null; cache_creation = $null; cache_read = $null; cost = $null; mock = $false }
+                if ($parsed.PSObject.Properties.Name -contains 'usage') {
+                    $pu = $parsed.usage
+                    if ($pu.PSObject.Properties.Name -contains 'input_tokens')                { $u.input_tokens   = [int]$pu.input_tokens }
+                    if ($pu.PSObject.Properties.Name -contains 'output_tokens')               { $u.output_tokens  = [int]$pu.output_tokens }
+                    if ($pu.PSObject.Properties.Name -contains 'cache_creation_input_tokens') { $u.cache_creation = [int]$pu.cache_creation_input_tokens }
+                    if ($pu.PSObject.Properties.Name -contains 'cache_read_input_tokens')     { $u.cache_read     = [int]$pu.cache_read_input_tokens }
+                }
+                if ($parsed.PSObject.Properties.Name -contains 'total_cost_usd') { $u.cost = $parsed.total_cost_usd }
+                $UsageOut.Value = $u
+            }
             return [string]$parsed.result
         }
         return ($raw | Out-String).TrimEnd()
     }
     catch {
+        if ($PSBoundParameters.ContainsKey('UsageOut')) {
+            $UsageOut.Value = @{ input_tokens = $null; output_tokens = $null; cache_creation = $null; cache_read = $null; cost = $null; mock = $false }
+        }
         return ($raw | Out-String).TrimEnd()
     }
 }

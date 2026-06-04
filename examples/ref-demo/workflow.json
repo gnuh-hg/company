@@ -1,0 +1,12 @@
+{
+  "name": "ref-demo",
+  "entry": "writer",
+  "max_steps": 5,
+  "nodes": [
+    { "id": "writer", "agent": "agents/writer.md", "input": "{{user_request}}", "output_key": "report" },
+    { "id": "reader", "agent": "agents/reader.md", "input": "{{report_ref}}", "output_key": "summary" }
+  ],
+  "edges": [
+    { "from": "writer", "to": "reader" }
+  ]
+}

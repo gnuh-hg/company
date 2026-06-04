@@ -246,6 +246,11 @@ function Test-Workflow {
         if ($n.output_key -in $script:ReservedKeys) {
             $errors.Add("node '$($n.id)': output_key '$($n.output_key)' trùng reserved-key (cấm: $($script:ReservedKeys -join ', '))")
         }
+        # I.C.1: output_key không được kết thúc '_ref' — suffix reserved cho artifact-by-reference
+        # (engine auto-inject '<key>_ref' = path tới .txt; output_key trùng suffix → ghi đè ngầm).
+        if (-not [string]::IsNullOrWhiteSpace($n.output_key) -and $n.output_key -match '_ref$') {
+            $errors.Add("node '$($n.id)': output_key '$($n.output_key)' không được kết thúc '_ref' (suffix reserved cho artifact-by-reference — I.C.1)")
+        }
         if (-not [string]::IsNullOrWhiteSpace($n.agent)) {
             if (-not (Test-Path -LiteralPath (Join-Path $ProjectDir $n.agent))) {
                 $errors.Add("node '$($n.id)' agent không tồn tại: $($n.agent)")
@@ -354,6 +359,17 @@ function Test-Workflow {
                         $warnings.Add("node '$id': key '{{$k}}' dùng _payload nhưng không có node rẽ nhánh (outdeg≥2) nào với output_key='$baseKey' — engine sẽ resolve '' (pre-seed); kiểm tra cấu trúc workflow.")
                     }
                     continue   # _payload dynamic — không error, bỏ qua data-cycle check
+                }
+                # I.C.1: <base>_ref = auto-inject đường dẫn tới <base>.txt (dynamic, lossless, opt-in).
+                # Nếu có node output_key=<baseKey> → valid (engine pre-seed + điền khi node done).
+                # Nếu KHÔNG có → WARN (tên key sai?); exit = 0 như _payload (warning không tính lỗi).
+                if ($k -match '^(.+)_ref$') {
+                    $baseKey = $Matches[1]
+                    $hasProducerForRef = $producers.ContainsKey($baseKey) -or ($baseKey -in $script:ReservedKeys)
+                    if (-not $hasProducerForRef) {
+                        $warnings.Add("node '$id': key '{{$k}}' dùng _ref nhưng '$baseKey' không phải output_key node nào — engine sẽ resolve '' (chưa có node sinh '$baseKey'); kiểm tra tên key.")
+                    }
+                    continue   # _ref dynamic — không error, bỏ qua data-cycle check
                 }
                 $errors.Add("node '$id': key '{{$k}}' không resolve được (không phải 'user_request' và không khớp output_key nào)")
                 continue

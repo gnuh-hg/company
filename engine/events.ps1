@@ -1,4 +1,4 @@
-# events.ps1 — event stream emitter (Phase D-I, Session D.1).
+# events.ps1 — event stream emitter (Phase D-I, Session D.1 → I.A.1).
 #
 # Scope D.1: kênh QUAN SÁT thêm (additive) song song run.log — KHÔNG thay run.log.
 #   `Write-Event $RunDir $Type [$Payload]` append 1 dòng JSON gọn vào <RunDir>/events.ndjson
@@ -6,9 +6,11 @@
 #   Schema: { seq, ts, type, ...payload } — seq tự tăng theo số dòng đã có (self-sequencing,
 #   stateless → dot-source-safe, resume nối tiếp đúng). payload trộn thẳng top-level (vd node,
 #   agent, output, status, terminal).
-#   type ∈ { run_start, node_start, node_output, node_done, awaiting, resumed, diff_violation,
-#            run_end }  (D.1 phát 5: run_start/node_start/node_output/node_done/run_end;
-#            awaiting/resumed/diff_violation wire ở D.3/D.6).
+#   9 loại event:
+#     run_start, node_start, node_output, node_done, awaiting, resumed, diff_violation, run_end
+#     (D.1 phát 5: run_start/node_start/node_output/node_done/run_end; awaiting/resumed/diff_violation D.3/D.6)
+#     node_usage (I.A.1): { node, agent, step, usage:{input_tokens,output_tokens,cache_creation,
+#                            cache_read,cost,mock,prompt_chars?,output_chars?} }
 #   Bất biến: event là quan sát, KHÔNG phải state — lỗi ghi event KHÔNG được phá run (nuốt lỗi).
 
 Set-StrictMode -Version Latest
@@ -21,7 +23,8 @@ Set-StrictMode -Version Latest
 # KHÔNG thêm loại event mới — app/SSE (Phase L) phân biệt qua field `kind`.
 $script:EventTypes = @(
     'run_start', 'node_start', 'node_output', 'node_done',
-    'awaiting', 'resumed', 'diff_violation', 'run_end'
+    'awaiting', 'resumed', 'diff_violation', 'run_end',
+    'node_usage'   # I.A.1: usage thật (real-mode) hoặc proxy chars (mock, field mock=true)
 )
 
 function Write-Event {

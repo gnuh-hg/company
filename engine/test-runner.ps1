@@ -2,7 +2,8 @@
 #
 # CHỈ gom + đếm + báo (D-B3): 7 stamp + mem-demo done-gate +
 # approval-demo done-gate + branchy 2-part protocol (J.4) +
-# ask-demo done-gate (K.5: pause:ask → awaiting_input → resume -Answer → done) →
+# ask-demo done-gate (K.5: pause:ask → awaiting_input → resume -Answer → done) +
+# ref-demo done-gate (I.C.1: artifact-by-reference {{key_ref}} → prompt chứa path không full text) →
 # in PASS/FAIL từng mục + bảng tổng → exit = số mục fail.
 # Mock-only, 0 token. KHÔNG đụng engine executor (workflow/graph/validate).
 #
@@ -106,8 +107,9 @@ function Invoke-SelfTest {
         Chạy bộ test engine: 7 p-*/stamp.ps1 (subprocess) +
         mem-demo done-gate (2-run -Mock inline) + approval-demo done-gate (pause→resume→done inline) +
         branchy 2-part protocol (route/payload split, J.4) +
-        ask-demo done-gate (pause:ask → awaiting_input → resume -Answer → done, K.5).
-        In PASS/FAIL từng mục + bảng tổng. 11 mục tổng.
+        ask-demo done-gate (pause:ask → awaiting_input → resume -Answer → done, K.5) +
+        ref-demo done-gate (artifact-by-reference {{key_ref}} → prompt chứa path không full text, I.C.1).
+        In PASS/FAIL từng mục + bảng tổng. 12 mục tổng.
     .OUTPUTS [int] số mục FAIL (0 = tất cả pass).
     #>
     param([string[]]$Pos)   # [all] hiện không phân nhóm — luôn chạy hết (B surface).
@@ -275,6 +277,37 @@ function Invoke-SelfTest {
     $items.Add([pscustomobject]@{ Name = 'ask-demo/done-gate'; Pass = $askOk; Detail = $askDetail })
     Write-SelfTestLine 'ask-demo/done-gate' $askOk $askDetail
 
+    # 7) ref-demo done-gate (I.C.1: artifact-by-reference {{key_ref}}) -----------
+    Write-Host ''
+    Write-Host '── ref-demo (artifact-by-reference {{key_ref}}) ──'
+    $refDir  = Join-Path $examples 'ref-demo'
+    $refRuns = Join-Path $refDir '.runs'
+    $rdOk = $false; $rdDetail = ''
+    try {
+        if (Test-Path -LiteralPath $refRuns) { Remove-Item -LiteralPath $refRuns -Recurse -Force }
+        $rdRun    = Invoke-Workflow $refDir 'selftest artifact' -Mock 6> $null
+        $rdStatus = [string](Get-RunState $rdRun).status
+        # reader prompt (2-reader.prompt.txt) phải chứa PATH (.txt) thay vì full text writer output.
+        $promptFiles = @(Get-ChildItem -LiteralPath $rdRun -Filter '*-reader.prompt.txt' -ErrorAction SilentlyContinue)
+        $hasPath     = $false
+        $hasFullTxt  = $false
+        foreach ($pf in $promptFiles) {
+            $content = Get-Content -LiteralPath $pf.FullName -Raw -Encoding utf8
+            if ($content -like '*.txt*')                     { $hasPath    = $true }
+            if ($content.Contains('[MOCK:writer]'))          { $hasFullTxt = $true }
+        }
+        $rdOk     = ($rdStatus -eq 'done' -and $hasPath -and -not $hasFullTxt)
+        $rdDetail = "status=$rdStatus path-in-prompt=$hasPath fulltext-in-prompt=$hasFullTxt"
+    }
+    catch {
+        $rdOk = $false; $rdDetail = $_.Exception.Message
+    }
+    finally {
+        if (Test-Path -LiteralPath $refRuns) { Remove-Item -LiteralPath $refRuns -Recurse -Force }
+    }
+    $items.Add([pscustomobject]@{ Name = 'ref-demo/done-gate'; Pass = $rdOk; Detail = $rdDetail })
+    Write-SelfTestLine 'ref-demo/done-gate' $rdOk $rdDetail
+
     # Bảng tổng -----------------------------------------------------------------
     $fails = @($items | Where-Object { -not $_.Pass }).Count
     $total = $items.Count
@@ -288,7 +321,7 @@ function Invoke-SelfTest {
     else {
         Write-Host "✗ selftest: $fails/$total FAIL" -ForegroundColor Red
     }
-    Write-Host '  (C.6: stamp assert nội dung node id; C.7: mem-demo assert "run2 ≠ run1"; D.6: approval-demo pause→resume→done; J.4: branchy 2-part route/payload; K.5: ask-demo pause:ask→answer→done)' -ForegroundColor DarkGray
+    Write-Host '  (C.6: stamp assert nội dung node id; C.7: mem-demo assert "run2 ≠ run1"; D.6: approval-demo pause→resume→done; J.4: branchy 2-part route/payload; K.5: ask-demo pause:ask→answer→done; I.C.1: ref-demo artifact-by-reference)' -ForegroundColor DarkGray
     return $fails
 }
 

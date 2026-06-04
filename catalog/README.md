@@ -64,3 +64,58 @@ Mỗi `catalog/<vai>.md` gồm đúng 5 mục, ~6–10 dòng tổng, mỗi mục
 | **Nhỏ / prototype** | `researcher`, `planner`, `pm`, `tech-lead`, `api-developer`, `frontend-developer` |
 | **Web-full** | + `ba`, `ux`, `ui`, `db-architect`, `auth-engineer`, `devops`, `qa-functional`, `qa-regression` |
 | **Mobile** | web-full + **1** trong (`mobile-ios` / `mobile-android` / `mobile-flutter`) |
+
+---
+
+## Convention: model-tiering agent (Phase I.B)
+
+> Gắn vào frontmatter agent `.md` để engine truyền `--model` cho claude CLI (real-mode).
+> Mock-path bỏ qua `model:` → output mock BẤT BIẾN.
+
+| Loại node | Model gợi ý | Lý do |
+|---|---|---|
+| **Branching** (outdeg≥2 — chỉ phát nhãn route, ~4–8 chars) | `claude-haiku-4-5-20251001` | Output cực ngắn; không cần suy luận phức tạp; tiết kiệm token đáng kể |
+| **Gate / approval** (in nhãn pass/fail/approve) | `claude-haiku-4-5-20251001` | Tương tự branching — phán quyết ngắn |
+| **Worker thông thường** (sinh nội dung dài) | mặc định (sonnet, để trống frontmatter) | Cần chất lượng cao; không override |
+
+**Cú pháp frontmatter:**
+```markdown
+---
+model: claude-haiku-4-5-20251001
+---
+
+# Agent: <tên>
+...
+```
+
+**Quy tắc:** node chỉ-phát-nhãn (branching/gate) → luôn dùng model rẻ; node sinh artifact → dùng model mặc định trừ khi có lý do rõ ràng.
+
+---
+
+## Guideline: tối thiểu-key input (Phase I.B.2)
+
+> Mỗi node chỉ pull `{{output_key}}` mà nó **thực sự cần** — tránh nhúng cả lịch sử pipeline.
+
+**Vấn đề:** `Resolve-Prompt` thay `{{key}}` bằng nguyên văn giá trị → pipeline tích lũy → node cuối nhận prompt rất lớn. Ví dụ: `deploy.prompt_chars = 552 vs story.prompt_chars = 18` (×30) dù deploy chỉ làm 1 việc.
+
+**Quy tắc tối thiểu-key:**
+
+| Tình huống | Key nên pull | Key không cần |
+|---|---|---|
+| Node downstream đã có upstream chắt lọc thông tin | chỉ upstream gần nhất | spec gốc nếu upstream đã phân tích lại |
+| Node terminal sau route (vd ship sau verdict:pass) | artifact cần ship | output test/gate (test đã pass = điều kiện route, không cần nhúng lại) |
+| Node auth/security | API definition | spec gốc (nếu API đã encode requirements) |
+| Node sinh schema từ tasks | tasks (tech-lead đã phân tích spec+design) | spec gốc |
+
+**Heuristic khi quyết định bỏ key:**
+1. **Chuỗi suy diễn:** nếu node A đã xử lý spec → tasks, node B chỉ cần tasks (không cần spec nữa).
+2. **Terminal sau route:** nếu node chỉ chạy khi condition đã đảm bảo (vd verdict:pass → ship), condition artifact không cần nhúng lại.
+3. **THẬN TRỌNG:** chỉ bỏ key khi chắc chắn node không bị mất thông tin nghiệp vụ thiết yếu. Bảo thủ > tiết kiệm.
+
+**Cascade effect (mock proxy):** mỗi key bỏ ở node X → output X nhỏ hơn → prompt node X+1 nhỏ hơn → cascade đến cuối pipeline. Savings nhân lên theo chiều dài chain còn lại.
+
+**Ví dụ web-demo (Phase I.B.2):**
+- `schema`: `{{spec}}\n{{tasks}}` → `{{tasks}}` (tasks = tech-lead đã chắt lọc từ spec+design)
+- `auth`: `{{spec}}\n{{api}}` → `{{api}}` (auth engineer làm từ API definition; spec đã encode vào API)
+- `loopy/ship`: `{{build}}\n{{test}}` → `{{build}}` (terminal sau verdict:pass; test passing = điều kiện route)
+- **Kết quả:** web-demo −351 prompt_chars (−15.2%), loopy −42 (−26.8%).

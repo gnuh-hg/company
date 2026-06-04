@@ -59,6 +59,13 @@ function Initialize-Context {
             $pk = "${k}_payload"
             if (-not $ctx.ContainsKey($pk)) { $ctx[$pk] = '' }
         }
+        # I.C.1: Pre-seed <output_key>_ref = "" cho MỌI node (opt-in artifact-by-reference, lossless).
+        # LUÔN cung cấp (path string ngắn, rẻ) → tác giả chọn {{key}} (inline) HAY {{key_ref}} (path).
+        # Không threshold: guideline doc quyết khi nào dùng; engine luôn inject đường dẫn sau node done.
+        if (-not [string]::IsNullOrWhiteSpace($k)) {
+            $rk = "${k}_ref"
+            if (-not $ctx.ContainsKey($rk)) { $ctx[$rk] = '' }
+        }
     }
     if (-not [string]::IsNullOrWhiteSpace($ProjectDir)) {
         $mem = Get-Memory $ProjectDir
@@ -265,6 +272,83 @@ function Test-NodeBranches {
     return @($Graph.adj[$NodeId]).Count -ge 2
 }
 
+function Test-SingleConsumer {
+    <#
+    .SYNOPSIS
+        Returns $true nếu $OutputKey có ĐÚNG 1 node consume trên graph VÀ node đó KHÔNG trên cycle.
+    .DESCRIPTION
+        I.C.3 (D-I1): Helper bảo thủ xác định khi nào safe to conditional-trim — tức là tác giả
+        có thể đổi template từ {{key}} → {{key_ref}} (artifact-by-reference, lossless) mà không
+        mất info với bất kỳ consumer nào.
+
+        "Consume" key K = template input chứa {{K}}, {{K_payload}}, hoặc {{K_ref}}.
+        Strip suffix _payload/_ref để lấy base key, so sánh với $OutputKey.
+
+        Điều kiện trim-eligible (CẢ HAI phải đúng):
+          1. Đúng 1 node consume $OutputKey trên toàn graph.
+          2. Node đó KHÔNG trên cycle (không thể re-consume trong loop sau).
+
+        MẶC ĐỊNH BẢO THỦ:
+          - 0 consumer (key không dùng) → $false (không cần trim gì)
+          - ≥2 consumer → $false (multi-consumer, phải giữ full)
+          - Consumer trên cycle (back-edge/loop) → $false (re-consume mỗi vòng → multi về thực)
+
+        Dùng bởi: tác giả/tool khi quyết định đổi {{key}} → {{key_ref}} trong template.
+        Runtime engine KHÔNG dùng để tự-trim (default keep-full; trim = opt-in template authoring).
+        Dot-source-safe: pure function, không self-exec khi dot-source.
+    .OUTPUTS [bool] $true = trim-eligible (single-consumer + không cycle).
+    #>
+    param(
+        [Parameter(Mandatory)]$Graph,
+        [Parameter(Mandatory)][string]$OutputKey
+    )
+    if ($null -eq $Graph) { return $false }
+
+    $tokenPattern = '\{\{\s*([A-Za-z0-9_]+)\s*\}\}'
+
+    # Thu thập node consume $OutputKey qua mọi biến thể: {{key}}, {{key_payload}}, {{key_ref}}.
+    # Strip suffix _payload và _ref để lấy base key, so sánh với $OutputKey.
+    $consumers = [System.Collections.Generic.List[string]]::new()
+    foreach ($n in $Graph.nodes) {
+        if ([string]::IsNullOrWhiteSpace($n.input)) { continue }
+        $found = $false
+        foreach ($m in [regex]::Matches($n.input, $tokenPattern)) {
+            $tok     = $m.Groups[1].Value
+            $baseKey = $tok -replace '_payload$','' -replace '_ref$',''
+            if ($baseKey -eq $OutputKey) { $found = $true; break }
+        }
+        if ($found -and -not $consumers.Contains($n.id)) { $consumers.Add($n.id) }
+    }
+
+    # 0 consumer (key unused) hoặc ≥2 consumer → không single-consumer
+    if ($consumers.Count -ne 1) { return $false }
+
+    $consumer = $consumers[0]
+    $adj = $Graph.adj
+
+    # Cycle check: BFS từ successors của consumer → nếu đường về consumer → cycle → false.
+    # Ý nghĩa: consumer trên cycle → sẽ re-consume key ở lượt chạy kế → coi như multi-consumer.
+    if (-not $adj.ContainsKey($consumer)) { return $true }   # terminal node, không cạnh → no cycle
+
+    $visited = @{}
+    $queue   = [System.Collections.Generic.Queue[string]]::new()
+    foreach ($edge in @($adj[$consumer])) {
+        $to = $edge.to
+        if (-not $visited.ContainsKey($to)) { $visited[$to] = $true; $queue.Enqueue($to) }
+    }
+    while ($queue.Count -gt 0) {
+        $cur = $queue.Dequeue()
+        if ($cur -eq $consumer) { return $false }   # cycle: consumer tự reach về mình → re-consume
+        if (-not $adj.ContainsKey($cur)) { continue }
+        foreach ($edge in @($adj[$cur])) {
+            $to = $edge.to
+            if (-not $visited.ContainsKey($to)) { $visited[$to] = $true; $queue.Enqueue($to) }
+        }
+    }
+
+    return $true
+}
+
 function Get-AgentFrontmatter {
     <#
     .SYNOPSIS
@@ -437,6 +521,8 @@ function Invoke-Workflow {
             if (Test-Path -LiteralPath $outPath) {
                 $restored = (Get-Content -LiteralPath $outPath -Raw -Encoding utf8)
                 $context[$k] = $restored
+                # I.C.1: Restore _ref path khi resume (file đã tồn tại trên đĩa → path đúng).
+                $context["${k}_ref"] = $outPath
                 # J.3: Restore _payload cho branching nodes khi resume (J2.1: outdeg≥2, thay type-eq-router).
                 if (Test-NodeBranches $graph $n.id) {
                     $context["${k}_payload"] = Get-RouterPayload $restored
@@ -703,8 +789,10 @@ function Invoke-Workflow {
         # branch rơi vào <sandbox>/projects/ (Find-GeneratedBranch tìm đúng). Mock bỏ qua WorkingDir.
         $projAbs   = (Resolve-Path -LiteralPath $ProjectDir).Path
 
+        # I.A.1: out-param nhận usage (real: .usage JSON; mock: proxy chars). @{} nếu catch.
+        $nodeUsage = @{}
         try {
-            $output = Invoke-Claude $prompt $agentPath -Mock:$Mock -Model $nodeModel -AllowedTools $fm.allowedTools -PermissionMode $fm.permission_mode -WorkingDir $projAbs -NodeId $cursor -RunDir $runDir
+            $output = Invoke-Claude $prompt $agentPath -Mock:$Mock -Model $nodeModel -AllowedTools $fm.allowedTools -PermissionMode $fm.permission_mode -WorkingDir $projAbs -NodeId $cursor -RunDir $runDir -UsageOut ([ref]$nodeUsage)
         }
         catch {
             $errMsg = $_.Exception.Message
@@ -748,6 +836,8 @@ function Invoke-Workflow {
         Set-Content -LiteralPath (Join-Path $runDir "$base.out.txt") -Value $output -Encoding utf8
         # D.1: node_output mang NỘI DUNG output ĐẦY ĐỦ (đóng #3 "(N chars)" → full content).
         Write-Event $runDir 'node_output' @{ node = $cursor; agent = $node.agent; step = $seq; output = [string]$output }
+        # I.A.1: node_usage — usage thật (real) hoặc proxy chars (mock, mock=true).
+        Write-Event $runDir 'node_usage' @{ node = $cursor; agent = $node.agent; step = $seq; usage = $nodeUsage }
 
         # K.2: Pause:ask — nếu node pause='ask' VÀ output chứa marker ASK_USER: → pause awaiting_input.
         # SONG SONG nhánh approval (D.3, type=approval) — KHÔNG đụng nhánh đó.
@@ -783,6 +873,13 @@ function Invoke-Workflow {
         if (-not [string]::IsNullOrWhiteSpace($node.output_key)) {
             Set-Content -LiteralPath (Join-Path $runDir "$($node.output_key).txt") -Value $output -Encoding utf8
             $context[$node.output_key] = $output
+            # I.C.1: Cung cấp <output_key>_ref = đường dẫn tuyệt đối tới .txt file (opt-in, lossless).
+            # Tác giả template chọn {{key}} (inline full) HAY {{key_ref}} (path → consumer tự Read).
+            # I.C.3 điểm quyết định (trim opt-in): dùng Test-SingleConsumer để kiểm tra an toàn.
+            #   Test-SingleConsumer $graph $node.output_key → $true = trim-eligible (1 consumer, no cycle).
+            #   Nếu $true → tác giả có thể đổi {{key}} → {{key_ref}} trong template consumer an toàn.
+            #   Runtime engine LUÔN giữ full trong context (mặc định keep-full); trim là tác giả chọn.
+            $context["$($node.output_key)_ref"] = (Join-Path $runDir "$($node.output_key).txt")
             # J.3: Auto-store <output_key>_payload cho branching nodes (J2.1: outdeg≥2, thay type-eq-router).
             # Tương thích ngược: branching node chỉ in nhãn → Get-RouterPayload = "" → pre-seed bình thường.
             # Áp dụng cả Mock (payload = "" cho mock 1-dòng) và real-mode.
