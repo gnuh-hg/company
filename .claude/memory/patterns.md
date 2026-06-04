@@ -92,3 +92,7 @@ Session I.C.3: engine/workflow.ps1 thêm Test-SingleConsumer (~55 dòng) — hel
 ## 2026-06-04 17:16 — I.D.1-caching-doc-pass
 
 Session I.D.1 (doc-only): caching.md NEW tại plan/hq-v2/phase-i/. Kết luận rõ: (1) không có --cache flag tường minh; (2) --exclude-dynamic-system-prompt-sections bị ignored với --system-prompt-file; (3) --betas defer đến I.D.2 (API-key only); (4) engine hiện tại đúng thứ tự stable-then-variable; (5) cách đo I.D.2 qua cache_creation/cache_read_input_tokens (đã wire I.A.1). Engine không đổi (git status plan/: chỉ caching.md+CHECKPOINT.md). selftest 12/12, validate hello exit 0, run -Mock done. Không đụng .claude/agents/*.md → no re-spawn smoke. .runs/ đã dọn. Vòng 1.
+
+## 2026-06-05 01:52 — I.D.2-real-run-done-gate-pass
+
+Session I.D.2 (DONE-GATE Phase I): tokrep-baseline (copy todo-web) + tokrep-opt ({{fe_ref}}+allowedTools Read). Real run data: baseline input=28020/cost=$1.968; opt input=28074/cost=$1.539. BÀI HỌC QUAN TRỌNG: mock proxy ≠ real input_tokens vì system-prompt dominates (50-80% input). Template-trim (I.B.2) giảm prompt_chars nhưng input_tok +0.2% flat trong real. Cost giảm 21.8% nhưng n=1 + non-det + cache variance. Artifact-ref (I.C.1) viable nhưng allowedTools tool-def overhead bù lại savings. Model-tier Haiku (I.B.1) + caching tự-động (không cần --betas) = real savings confirmed. Lossless: cả hai report BLOCKED/FIX FIRST tương đương. selftest 12/12, validate 2 fixture exit 0. .runs/ hello dọn; tokrep-* preserved. Vòng 1.

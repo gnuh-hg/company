@@ -1,0 +1,11 @@
+{
+  "name": "tokrep-opt",
+  "max_steps": 5,
+  "pipeline": [
+    { "step": "story",  "agent": "agents/pm.md",                 "input": "{{user_request}}",        "output_key": "story"  },
+    { "step": "flow",   "agent": "agents/ux.md",                 "input": "{{story}}",               "output_key": "flow"   },
+    { "step": "tasks",  "agent": "agents/tech-lead.md",          "input": "{{story}}\n{{flow}}",     "output_key": "tasks"  },
+    { "step": "fe",     "agent": "agents/frontend-developer.md", "input": "{{flow}}\n{{tasks}}",     "output_key": "fe"     },
+    { "step": "report", "agent": "agents/qa-functional.md",      "input": "{{story}}\n{{fe_ref}}",   "output_key": "report" }
+  ]
+}

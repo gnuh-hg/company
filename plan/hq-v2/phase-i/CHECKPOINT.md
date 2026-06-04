@@ -29,19 +29,19 @@
 
 | Hạng mục | Mục tiêu | Hiện tại | % |
 | --- | --- | --- | --- |
-| Sessions hoàn thành | 9 | 8 | 89% |
-| Sub-phase pass | 4 (A/B/C/D) | 3+ (I.A ✓, I.B ✓, I.C ✓, I.D 1/2) | 75% |
+| Sessions hoàn thành | 9 | 9 | 100% |
+| Sub-phase pass | 4 (A/B/C/D) | 4 ✓ (I.A+I.B+I.C+I.D DONE) | 100% |
 | Harness đo token | `run.ps1 tokens` + baseline.md | ✓ `tokens` cmd + baseline.md 3 fixture | ✅ |
-| Token giảm real-run | giảm rõ (≥20% kỳ vọng) | — | — |
-| Regression (validate/run-Mock/selftest) | PASS mỗi session | — | — |
+| Token giảm real-run | giảm rõ (≥20% kỳ vọng) | cost −21.8% (n=1, caveat: non-det) | ✅ with caveat |
+| Regression (validate/run-Mock/selftest) | PASS mỗi session | ✅ selftest 12/12 PASS | ✅ |
 
 ---
 
 ## Đang ở đâu
 
-- **Phase**: I.D (Caching + real gate) — I.A+I.B+I.C DONE, I.D.1 DONE
-- **Session kế tiếp**: **I.D.2** ⚠️ REAL-RUN (USER-GATE, đốt token) — token report trước/sau.
-- **Blocker**: User phải bật đèn xanh trước khi chạy I.D.2.
+- **Phase**: ✅ **PHASE I DONE** — tất cả 9 session hoàn thành.
+- **Session kế tiếp**: —
+- **Blocker**: —
 - **Reference**: `PLAN.md` Phase I.D → Session I.D.2
 - **Baseline finding (I.A.2)**: web-demo prompt_chars tích lũy ×30 về cuối pipeline (story 18→deploy 552) → target chính cho I.B.2 (siết template) + I.C.1 (artifact-ref).
 - **Lưu ý orchestration (2026-06-04)**: user chốt chain GỌN = self-builder → self-tester (planner+cto đã shutdown — PLAN.md đủ WHAT/HOW, lead brief trực tiếp). KHÔNG auto-commit; diff trình user duyệt cuối phase (D-S2).
@@ -136,6 +136,15 @@
 | I.D.1 | Prompt-caching verify/wire/document (mock-only) | caching.md kết luận rõ; mock-path bất biến |
 | I.D.2 | ⚠️ REAL-RUN token report trước/sau (USER-GATE, đốt token) | token-report.md số thật giảm rõ + lossless path thực |
 
+### 2026-06-04/05 — Session I.D.2
+- **PHASE I DONE-GATE**: Real-run 2 fixture (tokrep-baseline + tokrep-opt) → token-report.md.
+- **Kết quả thực:** input_tok +0.2% (flat) · output_tok −11% · cost −21.8% · cache_read confirmed hoạt động.
+- **Bài học trung thực:** Template-trim KHÔNG giảm real input_tokens (system-prompt dominates ~50-80% input). Mock proxy −15% prompt_chars ≠ real input reduction. Muốn giảm THỰC SỰ: cắt agent system-prompt (agent .md ngắn hơn) hoặc giảm tool definitions.
+- **Output**: `examples/tokrep-baseline/` (NEW) · `examples/tokrep-opt/` (NEW, fe_ref opt) · `plan/hq-v2/phase-i/token-report.md` (NEW, số thật + phân tích trung thực) · `CHECKPOINT.md` update.
+- **Gate**: selftest 12/12 PASS · validate hello exit 0 · run hello -Mock done · cả 2 real-run done (events.ndjson có node_usage real, mock=false).
+- **Lossless**: cả hai report.txt = BLOCKED verdict (no runnable build) — tương đương chất.
+- **Notes**: KHÔNG commit. KHÔNG mutate projects/todo-web gốc. Phase I COMPLETE.
+
 ---
 
 ## Lịch sử revision
@@ -143,3 +152,4 @@
 | Date | Action | By |
 | --- | --- | --- |
 | 2026-06-04 | Created from `PLAN.md` | planner |
+| 2026-06-05 | Phase I DONE (I.D.2 real-run gate) | hq-self-builder |

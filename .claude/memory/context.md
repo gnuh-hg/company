@@ -92,3 +92,7 @@ Self-mod I.C.3 verify. Files đổi: engine/workflow.ps1 (Test-SingleConsumer + 
 ## 2026-06-04 17:16 — I.D.1-verify-pass
 
 Self-mod I.D.1 verify. Files đổi: plan/hq-v2/phase-i/caching.md (NEW), plan/hq-v2/phase-i/CHECKPOINT.md. Verdict: PASS. caching.md: kết luận rõ (no --cache flag; --exclude-dynamic bị ignored; --betas defer; structure OK; cách đo I.D.2 qua cache_creation/read). Engine không đổi (git status plan/ chỉ 2 file plan; engine changes = từ sessions I.A-I.C). selftest 12/12, validate hello exit 0, run -Mock done. .runs/ đã dọn. Vòng 1. I.D.1 = last session trước real-run gate (I.D.2 user-gate).
+
+## 2026-06-05 01:52 — I.D.2-verify-pass — Phase I DONE
+
+Self-mod I.D.2 verify (DONE-GATE Phase I). Files đổi: examples/tokrep-baseline/, examples/tokrep-opt/, plan/hq-v2/phase-i/token-report.md, CHECKPOINT.md. Verdict: PASS. Tokens real: baseline=28020/$1.968; opt=28074/$1.539. input_tok +0.2% flat (TRUNG THỰC — report không spin). Lossless: cả hai BLOCKED/FIX FIRST tương đương. selftest 12/12, validate 2 fixture exit 0. Phase I DONE (9/9 sessions). Baseline selftest = 12/12. Không đụng .claude/agents/*.md → no re-spawn smoke.

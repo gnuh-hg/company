@@ -96,7 +96,8 @@
 - **Phụ thuộc:** không chặn bởi J/K/I (khác lớp). H.0 nên đi TRƯỚC để khoá reframe engine=branch-only mà J/K/L dựa vào.
 - **Done-gate:** orchestrator nhận 1 request → research → plan → **dựng + chạy 1 chi nhánh thật qua engine** → test → record, hoàn toàn động (không DAG); so token vs HQ-workflow cũ (kỳ vọng giảm mạnh); mỗi subagent/skill có tiêu chí chất lượng + được 1 lần chạy thử.
 
-### Phase I — Tối ưu token engine chi nhánh (issue 2)
+### Phase I — Tối ưu token engine chi nhánh (issue 2) — ✅ DONE (2026-06-05, 9/9 session)
+> **Done-gate đạt với phát hiện trung thực:** đủ 6 hạng mục (đo · model-tier · siết template · artifact-by-ref · handoff-payload · caching) build + verify độc lập; mock-path + regression (validate hello + run -Mock + selftest **12/12**) bất biến mọi session. **Real-run report (`token-report.md`):** input_tokens **KHÔNG giảm** (flat +0.2%) vì system-prompt + tool-defs chi phối ~50–80% input/call → mock-proxy −15% prompt_chars KHÔNG dịch sang real input; cost −21.8% (chủ yếu output ngắn hơn + caching, NHIỄU n=1 non-determinism); prompt-caching XÁC NHẬN tự-hoạt (cache_read 153K–419K, không cần `--betas`); lossless xác nhận (report baseline≡opt). **Khuyến nghị tiếp:** muốn cắt real input → rút gọn agent system-prompt / giảm allowedTools, không phải template-trim.
 - **Mục tiêu:** giảm token mỗi run workflow chi nhánh, đo được trước/sau.
 - **Xây gì:**
   - **Đo lường trước tiên:** harness gom `usage` từ `claude --output-format json` (input/output/cache tokens) → báo cáo token mỗi run/node (baseline để mọi tối ưu có số).
@@ -108,6 +109,13 @@
 - **Cần làm rõ:** **handoff-output là lossy** — an toàn khi output chỉ nuôi 1 successor ngay sau; RỦI RO khi 1 `output_key` bị nhiều `{{...}}` consume (vd `verdict` consume bởi planner/builder/escalate_gate/escalate_report/record) hoặc re-consume trong loop. → chọn: trim-có-điều-kiện (chỉ khi single-consumer trên path) HAY artifact-by-reference (lossless, consumer pull chi tiết) HAY layer cả hai; cách agent phát "route + payload" (structured 2-phần dùng chung kênh CD-2); ngưỡng kích thước mới ghi-file.
 - **Phụ thuộc:** Phase J (handoff-output cần agent-biết-đích của CD-2). Phần còn lại độc lập, có thể đi sớm (đo baseline trước).
 - **Done-gate:** báo cáo token trước/sau trên ≥1 chi nhánh thật (vd `landing-email`) cho thấy giảm rõ; mock-path + regression bất biến; lossy-trim (nếu chọn) chứng minh không mất info trên path thực.
+
+### Phase I2 — Handoff-by-workspace + model-tiering có nguyên tắc (tiếp nối I) — 🟡 PLAN soạn xong (2026-06-05)
+- **Mục tiêu:** cắt **real** input tokens (Phase I phát hiện template-trim ≈ 0 real vì system-prompt + tool-defs chi phối ~50–80% input/call).
+- **Xây gì:** (A) estimator giải phẫu input (`tokens -Anatomy` tách system/tool/user/mem) · (B) **handoff-by-workspace** — node sau nhận brief "đọc file gì, làm gì" (kiểu long-plan) + tự `Read` chọn lọc, xây trên `{{key_ref}}` (I.C.1), opt-in field `handoff`, fixture `handoff-demo` · (C) **rút chi phí cố định** (tool-set tối thiểu + lean system-prompt — phần chi phối thật) · (D) **model-tiering có nguyên tắc** (bảng vai→hạng: label→Haiku, reasoning/design→Sonnet/Opus; KHÔNG cào bằng xuống loại tệ nhất) · (E) real-run A/B (user-gate).
+- **Cần làm rõ (Q1–Q4):** brief do agent/engine sinh; handoff opt-in/default; mức lean system-prompt; fixture+ngân sách real-run. Xem `plan/hq-v2/phase-i2/PLAN.md`.
+- **Phụ thuộc:** Phase I (DONE — `{{key_ref}}`, tokens harness, model: frontmatter, caching xác nhận).
+- **Done-gate:** `token-report-v2.md` trên pipeline dài thật cho thấy real input giảm rõ (nhắm đúng system/tool/user) hoặc giải thích trung thực; mock-path + regression (selftest 12/12) bất biến; lossless + chất-lượng giữ.
 
 ### Phase J — Rẽ nhánh chủ động: engine bơm choices + validate + retry (CD-2)
 - **Mục tiêu:** router không còn phụ thuộc prose hardcode trong `.md`; sai-form hồi-phục-được thay vì chết; mở khoá handoff-output (Phase I).
