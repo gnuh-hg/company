@@ -70,8 +70,8 @@
 | Session | Scope 1 dòng | STOP gate cốt lõi |
 | --- | --- | --- |
 | I2.A.1 | Estimator giải phẫu input (system/tool/user/mem) + input-anatomy.md | `tokens -Anatomy` bảng %-share; anatomy.md ≥3 fixture chỉ rõ phần chi phối |
-| I2.B.1 | Thiết kế giao thức brief + field `handoff` + reserved `_brief`/`workspace` (schema/validate) | helper Get-HandoffBrief unit test; validate chấp nhận+chặn; selftest 12/12 |
-| I2.B.2 | Wire executor + fixture handoff-demo (pipeline dài) | consumer prompt = brief+path không full text; graph cũ y hệt; selftest 12/13 |
+| I2.B.1 | Thiết kế brief + manifest `workspace.md` (file trung gian MỚI) + field `handoff` + reserved `_brief`/`workspace` (schema/validate) | helper Get-HandoffBrief/Add-WorkspaceEntry unit test; validate chấp nhận+chặn; selftest 12/12 |
+| I2.B.2 | Wire executor (append `workspace.md` + bơm brief/workspace/ref) + fixture handoff-demo (pipeline dài) | consumer prompt = brief+path không full text; manifest ghi; graph cũ y hệt; selftest 12/13 |
 | I2.B.3 | Selective-read guideline + đo proxy net-thắng + ngưỡng | guideline+ngưỡng ghi; proxy user_msg giảm đo được |
 | I2.C.1 | Tool-set tối thiểu mỗi agent (frontmatter) | ≥2 agent rút tool; estimator tool_def giảm; run -Mock done |
 | I2.C.2 | Lean system-prompt convention + áp mẫu | ≥2–3 agent lean; estimator system_chars giảm; selftest 12/12 |

@@ -19,6 +19,25 @@ Phase I (DONE 2026-06-05) đã xây đủ 6 hạng mục đo/tối ưu, NHƯNG r
 1. **Handoff bằng file trung gian kiểu long-plan**: nội dung gửi node sau chỉ là "đọc file X/Y, làm việc Z" thay vì prompt dài; node sau **đọc chọn lọc** (không buộc load cả khối). Xây trên `{{key_ref}}` (I.C.1) — nâng thành **giao thức có cấu trúc**.
 2. **Model không cố chấp dùng loại tệ nhất**: map **vai-trò-node → hạng model** (label→Haiku, reasoning/design→Sonnet/Opus); cào bằng Haiku sẽ hạ chất lượng → tốn token sửa (đắt hơn).
 
+### Mô hình workspace + file trung gian (làm rõ "giống long-plan")
+
+> "Giống long-plan" = mượn **CƠ CHẾ HOẠT ĐỘNG**, KHÔNG phải dùng đúng file `PLAN.md`/`CHECKPOINT.md`.
+> Cơ chế mượn: *tác-nhân-mới (= node sau, context rỗng) đọc một **index nhỏ** để biết "có gì / đang
+> ở đâu", rồi tự **pull chi tiết** từ artifact lớn theo nhu cầu; chỉ-dẫn truyền đi thì **ngắn gọn**.*
+
+Áp vào engine, **workspace của 1 run = thư mục run-dir** (đã tồn tại). File trung gian gồm **3 lớp**:
+
+| Lớp | File (trong run-dir) | Vai (analog cơ chế long-plan) | Cỡ | Ai đọc / ghi |
+|---|---|---|---|---|
+| **Artifact** | `<output_key>.txt` *(ĐÃ CÓ — engine ghi mỗi node)* | nội dung deliverable từng node (như "thân" mỗi phase) | LỚN | node sau đọc **CHỌN LỌC** (không buộc cả file) |
+| **Index / Manifest** | `workspace.md` *(MỚI — I2.B)* | "đang ở đâu / có gì": liệt kê artifact đã sinh + 1 dòng mô tả + node sinh + path (vai như CHECKPOINT, **append 1 dòng mỗi node done**) | NHỎ | node sau đọc **TRƯỚC** (luôn) để biết đọc tiếp file nào; engine ghi |
+| **Brief** | block `## Handoff` trong output producer → bơm qua `{{<key>_brief}}` | chỉ-dẫn "đọc file gì, làm gì" cho **successor cụ thể** (vai như câu "session kế: làm X, đọc Y §Z") | RẤT NHỎ | bơm vào `user_message` successor — **phần DUY NHẤT nhúng inline** |
+
+- **`user_request` gốc** (immutable, vai như `PLAN.md`) đã sẵn qua `{{user_request}}` — không cần file mới.
+- **`workspace.md` là file trung gian MỚI cốt lõi** của phase: engine append 1 dòng `- <key> (<node>): <mô-tả-ngắn> → <path>` mỗi khi node done — y như CHECKPOINT update sau mỗi session. Nó là "bản đồ" để node sau đọc-chọn-lọc thay vì nhận cả khối.
+- **Luồng 1 handoff**: producer xong → ghi `<key>.txt` (full) + append `workspace.md` + (nếu `handoff: workspace`) viết block `## Handoff` → engine tách `{{<key>_brief}}`. Successor nhận `user_message` = brief (rất nhỏ) + biết `workspace.md` path → đọc manifest (nhỏ) → `Read` chọn lọc artifact cần. **Không khối nào bị nhúng nguyên văn vào prompt** (khác hành vi cũ: nhúng full `{{key}}`).
+- **Không phải PLAN/CHECKPOINT literal**: ta KHÔNG tạo file tên `PLAN.md`/`CHECKPOINT.md` trong run-dir; chỉ tái dụng *pattern index-nhỏ-trỏ-artifact-lớn* + *brief-ngắn-thay-cả-khối*.
+
 ### Điều kiện net-thắng của handoff-by-workspace (đã suy từ số I.D.2)
 File-handoff CHỈ net-giảm token khi **đồng thời**: (a) output thượng nguồn LỚN, (b) node sau chỉ cần ĐỌC MỘT PHẦN (đọc-toàn-bộ = nội dung vào context qua tool-result y như nhúng + cộng tool-def + 1 lượt tool → TỆ HƠN), (c) pipeline đủ dài để khấu hao chi phí cố định `Read` tool-def, (d) song song rút system-prompt/tool-set. Plan phải **đo A/B thật** để xác nhận, KHÔNG tin giả định.
 
@@ -90,7 +109,8 @@ File-handoff CHỈ net-giảm token khi **đồng thời**: (a) output thượng
 ### Session I2.B.1 — Thiết kế giao thức brief + schema (design + validate, ít/không code runtime)
 - **Scope**:
   - Chốt Q1/Q2 (nếu user chưa). Thiết kế format **"## Handoff"** block (producer agent viết cuối output: danh sách file cần đọc trong workspace + directive ngắn cho successor) + convention workspace = run-dir (đã có `<key>.txt`).
-  - Engine: định nghĩa field node `handoff: workspace` (opt-in) + key bridge `{{<key>_brief}}` (tách block "## Handoff" từ output producer, giống `Get-RouterPayload` tách `_payload`) HOẶC `{{workspace}}` (đường dẫn run-dir). Chốt key tại session, đăng ký reserved-aware trong `validate.ps1`.
+  - Thiết kế **schema `workspace.md`** (file trung gian MỚI, xem §Mô hình workspace): dòng `- <key> (<node>): <mô-tả> → <path>` append mỗi node done; helper thuần `Add-WorkspaceEntry`/`Get-WorkspacePath` (dot-source-safe).
+  - Engine: định nghĩa field node `handoff: workspace` (opt-in) + key bridge `{{<key>_brief}}` (tách block "## Handoff" từ output producer, giống `Get-RouterPayload` tách `_payload`) + `{{workspace}}` (đường dẫn `workspace.md` để successor đọc manifest). Chốt key tại session, đăng ký reserved-aware trong `validate.ps1`.
   - `validate.ps1`: `_brief`/`workspace` reserved-aware; WARN nếu consumer dùng `{{x_brief}}` mà producer `x` không khai `handoff`.
   - CHƯA wire executor nặng — chỉ schema + validate + helper thuần `Get-HandoffBrief` (parse, dot-source-safe) + unit test.
 - **STOP gate**: helper `Get-HandoffBrief` parse đúng (unit test); `validate` chấp nhận `handoff: workspace` + chặn reserved key mới; `validate hello/loopy/branchy/web-demo/ref-demo` exit 0; `selftest` 12/12. Mock-path bất biến.
@@ -98,7 +118,7 @@ File-handoff CHỈ net-giảm token khi **đồng thời**: (a) output thượng
 
 ### Session I2.B.2 — Wire executor + fixture pipeline dài
 - **Scope**:
-  - Wire (ADDITIVE): node `handoff: workspace` → bridge bơm `{{<key>_brief}}` + `{{<key>_ref}}` (path) vào successor thay vì `{{key}}` full; pre-seed + runtime + resume (bám `_payload`/`_ref`). Node KHÔNG khai `handoff` → hành vi cũ y hệt.
+  - Wire (ADDITIVE): mỗi node done → engine append `workspace.md` (manifest). Node `handoff: workspace` → bridge bơm `{{<key>_brief}}` + `{{workspace}}` (path manifest) + `{{<key>_ref}}` (path artifact) vào successor thay vì `{{key}}` full; pre-seed + runtime + resume (bám `_payload`/`_ref`). Node KHÔNG khai `handoff` → hành vi cũ y hệt (workspace.md vẫn ghi nhưng không bơm — quan sát thuần).
   - Fixture mới `examples/handoff-demo/` (pipeline ≥4 node, ≥1 producer output lớn + consumer dùng brief+ref, agent consumer có `Read`). Mock: consumer "đọc" → engine mock trả deterministic; verify prompt consumer = brief + path (KHÔNG full text).
   - Thêm 1 mục selftest `handoff-demo/done-gate` (12→13) — quyết tại session.
 - **STOP gate**: `run handoff-demo -Mock` done; prompt consumer chứa brief + path, KHÔNG full text (grep); graph cũ (no `handoff`) chạy y hệt; `selftest` 12/12 hoặc 13/13; regression PASS.
@@ -184,3 +204,4 @@ File-handoff CHỈ net-giảm token khi **đồng thời**: (a) output thượng
 | Date | Change | Lý do |
 | --- | --- | --- |
 | 2026-06-05 | Initial | Soạn từ 2 đề xuất user (handoff-by-file + model-tier có nguyên tắc) sau phát hiện real-run Phase I (system-prompt+tool-defs chi phối input, template-trim ≈ 0 real savings). 4 quyết định cần chốt Q1–Q4. |
+| 2026-06-05 | Thêm §"Mô hình workspace + file trung gian" | User làm rõ "giống long-plan" = mượn CƠ CHẾ (index-nhỏ-trỏ-artifact-lớn + brief-ngắn), KHÔNG dùng file PLAN/CHECKPOINT literal. Định nghĩa 3 lớp file trung gian (artifact `<key>.txt` / manifest `workspace.md` MỚI / brief `_brief`) + wire `workspace.md` vào I2.B.1/B.2. |
